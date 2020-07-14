@@ -22,5 +22,5 @@ void Renderer::Render()
 
 void Renderer::PrepareDataStructures()
 {
-
+    //auto device = m_deviceManager->GetDevice();
 }

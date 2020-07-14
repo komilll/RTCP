@@ -5,6 +5,7 @@ CommandQueue::CommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE
 	m_fenceValue = 0;
 	m_commandListType = type;
 	m_device = device;
+	assert(m_device && "Passed device is empty");
 
 	D3D12_COMMAND_QUEUE_DESC desc{};
 	desc.Type = type;
@@ -12,7 +13,7 @@ CommandQueue::CommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE
 	desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 	desc.NodeMask = 0;
 
-	ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_device)));
+	ThrowIfFailed(m_device->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_commandQueue)));
 	ThrowIfFailed(m_device->CreateFence(m_fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)));
 
 	m_fenceEvent = ::CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -36,7 +37,7 @@ ComPtr<ID3D12GraphicsCommandList2> CommandQueue::GetCommandList()
 		commandAllocator = CreateCommandAllocator();
 	}
 
-	if (m_commandListQueue.empty())
+	if (!m_commandListQueue.empty())
 	{
 		commandList = m_commandListQueue.front();
 		m_commandListQueue.pop();
@@ -74,6 +75,43 @@ int CommandQueue::ExecuteCommandList(ComPtr<ID3D12GraphicsCommandList2> commandL
 	commandAllocator->Release();
 
 	return fenceValue;
+}
+
+int CommandQueue::Signal()
+{
+	const int fenceValueForSignal = ++m_fenceValue;
+	ThrowIfFailed(m_commandQueue->Signal(m_fence.Get(), fenceValueForSignal));
+
+	return fenceValueForSignal;
+}
+
+bool CommandQueue::IsFenceComplete(int fenceValue)
+{
+	return m_fence->GetCompletedValue() >= fenceValue;
+}
+
+void CommandQueue::WaitForFenceValue(int fenceValue, std::chrono::milliseconds duration)
+{
+	if (m_fence->GetCompletedValue() < fenceValue)
+	{
+		ThrowIfFailed(m_fence->SetEventOnCompletion(fenceValue, m_fenceEvent));
+		::WaitForSingleObject(m_fenceEvent, static_cast<DWORD>(duration.count()));
+	}
+}
+
+void CommandQueue::Flush()
+{
+	const int fenceValueForSignal = Signal();
+	WaitForFenceValue(fenceValueForSignal);
+}
+
+void CommandQueue::ResetCommandAllocator()
+{
+
+}
+
+void CommandQueue::ResetCommandList()
+{
 }
 
 ComPtr<ID3D12CommandAllocator> CommandQueue::CreateCommandAllocator() const

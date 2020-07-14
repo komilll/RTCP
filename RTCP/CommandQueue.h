@@ -7,17 +7,19 @@ class CommandQueue
 {
 public:
 	CommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type);
-	virtual ~CommandQueue();
+	//virtual ~CommandQueue();
 
 	ComPtr<ID3D12GraphicsCommandList2> GetCommandList();
 	int ExecuteCommandList(ComPtr<ID3D12GraphicsCommandList2> commandList);
 
 	int Signal();
 	bool IsFenceComplete(int fenceValue);
-	void WaitForFenceValue(int fenceValue);
+	void WaitForFenceValue(int fenceValue, std::chrono::milliseconds duration = std::chrono::milliseconds::max());
 	void Flush();
 
-	ComPtr<ID3D12CommandQueue> GetD3D12CommandQueue() const;
+	void ResetCommandAllocator();
+	void ResetCommandList();
+	ComPtr<ID3D12CommandQueue> GetD3D12CommandQueue() const { return m_commandQueue; };
 
 protected:
 	ComPtr<ID3D12CommandAllocator> CreateCommandAllocator() const;
@@ -34,9 +36,9 @@ private:
 	using CommandListQueue = std::queue<ComPtr<ID3D12GraphicsCommandList2>>;
 
 	D3D12_COMMAND_LIST_TYPE m_commandListType;
-	ComPtr<ID3D12Device2> m_device;
-	ComPtr<ID3D12CommandQueue> m_commandQueue;
-	ComPtr<ID3D12Fence> m_fence;
+	ComPtr<ID3D12Device2> m_device				= NULL;
+	ComPtr<ID3D12CommandQueue> m_commandQueue   = NULL;
+	ComPtr<ID3D12Fence> m_fence					= NULL;
 	HANDLE m_fenceEvent;
 	int m_fenceValue;
 
