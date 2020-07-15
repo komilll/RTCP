@@ -13,17 +13,18 @@ using namespace DirectX;
 class ModelClass
 {
 public:
-	typedef struct _instanceType {
-		XMFLOAT3 color;
-		XMFLOAT3 position;
-	} InstanceType;
+	//typedef struct _instanceType {
+	//	XMFLOAT3 color;
+	//	XMFLOAT3 position;
+	//} InstanceType;
 
 	struct VertexBufferStruct {
 		XMFLOAT3 position;
-		XMFLOAT3 normal;
-		XMFLOAT3 tangent;
-		XMFLOAT3 binormal;
-		XMFLOAT2 uv;
+		XMFLOAT3 color;
+		//XMFLOAT3 normal;
+		//XMFLOAT3 tangent;
+		//XMFLOAT3 binormal;
+		//XMFLOAT2 uv;
 	};
 
 	struct Bounds {
@@ -78,35 +79,31 @@ public:
 		unsigned int vertexCount;
 		unsigned int indexCount;
 
-		VertexBufferStruct* vertices;
-		unsigned long* indices;
-
-		Mesh() = default;
-		Mesh(VertexBufferStruct _vertices[], unsigned long _indices[]) : vertices{ _vertices }, indices{ _indices }
-		{
-
-		}
+		std::vector<VertexBufferStruct> vertices;
+		std::vector<unsigned long> indices;
 	};
 
-	void CreateLine(ComPtr<ID3D12Device2> device, XMFLOAT3 start, XMFLOAT3 end);
-	void CreatePlane(ComPtr<ID3D12Device2> device, XMFLOAT2 size);
-	void CreateCube(ComPtr<ID3D12Device2> device, XMFLOAT3 min, XMFLOAT3 max);
-	void SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, float left = -1.0f, float right = 1.0f, float top = 1.0f, float bottom = -1.0f);
-	void LoadModel(std::string path, ComPtr<ID3D12Device2> device);
+	//void CreateLine(ComPtr<ID3D12Device2> device, XMFLOAT3 start, XMFLOAT3 end);
+	//void CreatePlane(ComPtr<ID3D12Device2> device, XMFLOAT2 size);
+	//void CreateCube(ComPtr<ID3D12Device2> device, XMFLOAT3 min, XMFLOAT3 max);
+	void SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList> commandList, float left = -1.0f, float right = 1.0f, float top = 1.0f, float bottom = -1.0f);
+	//void LoadModel(std::string path, ComPtr<ID3D12Device2> device);
 	Mesh GetMesh(int index) const { return m_meshes.at(index); };
 	std::vector<Mesh> GetMeshes() const { return m_meshes; };
 	//Return indices to render count
 	//unsigned int Render(ID3D11DeviceContext* context);
 
-	Bounds GetBounds(int meshIndex = 0);
+	//Bounds GetBounds(int meshIndex = 0);
 
 private:
-	void ProcessNode(aiNode* node, const aiScene* scene);
-	Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene);
+	//void ProcessNode(aiNode* node, const aiScene* scene);
+	//Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene);
 
 	bool CreateRectangle(ComPtr<ID3D12Device2> device, float left, float right, float top, float bottom);
 
-	bool PrepareBuffers(ComPtr<ID3D12Device2> device);
+	bool PrepareBuffers(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList> commandList);
+
+	void UpdateBufferResource(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList> commandList, ID3D12Resource** pDestinationResource, ID3D12Resource** pIntermediateResource, size_t numElements, size_t elementSize, const void* bufferData, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE);
 
 	template <std::size_t N, typename T>
 	std::vector<T> GetFirstIndices()
@@ -133,10 +130,12 @@ public:
 
 private:
 	std::vector<Mesh> m_meshes;
-	//ID3D11Buffer* m_vertexBuffer = NULL;
-	//ID3D11Buffer* m_indexBuffer = NULL;
-	//ID3D11Buffer* m_instanceBuffer = NULL;
-	unsigned int m_indexCount = 0;
-	unsigned int m_instanceCount = 0;
+
+	ComPtr<ID3D12Resource> m_vertexBuffer = NULL;
+	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+
+	ComPtr<ID3D12Resource> m_indexBuffer = NULL;
+	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
+
 	D3D_PRIMITIVE_TOPOLOGY m_topology = D3D_PRIMITIVE_TOPOLOGY::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 };

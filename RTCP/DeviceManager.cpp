@@ -3,6 +3,7 @@
 HRESULT DeviceManager::InitializeDeviceResponsibilities(HWND hwnd)
 {
 	HRESULT result = S_OK;
+    return result;
 
     ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(m_useWarp);
     m_device = CreateDevice(dxgiAdapter4);
@@ -288,6 +289,22 @@ void DeviceManager::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr
     }
 }
 
+int DeviceManager::ExecuteCommandList()
+{
+    assert(m_commandList && "Command list is null");
+    ThrowIfFailed(m_commandList->Close());
+
+    ID3D12CommandList* const commandLists[]{ m_commandList.Get() };
+    m_commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);
+
+    return (m_frameFenceValues[m_currentBackBufferIndex] = Signal(m_commandQueue, m_fence, m_fenceValue));
+}
+
+void DeviceManager::WaitForFenceValue(int fenceValue)
+{
+    WaitForFenceValue(m_fence, fenceValue, m_fenceEvent);
+}
+
 void DeviceManager::ClearRenderTarget()
 {
     auto backBuffer = GetCurrentBackBufferResource();
@@ -308,7 +325,7 @@ void DeviceManager::Present()
     CD3DX12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
     m_commandList->ResourceBarrier(1, &barrier);
 
-    ThrowIfFailed(m_commandList->Close());;
+    ThrowIfFailed(m_commandList->Close());
 
     ID3D12CommandList* const commandLists[]{ m_commandList.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);

@@ -41,8 +41,9 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
         }
     }
 
-    deviceManager->FlushBackBuffer();
-    deviceManager->CloseMainHandle();
+    renderer->OnDestroy();
+    //deviceManager->FlushBackBuffer();
+    //deviceManager->CloseMainHandle();
 
     return result;
 }
