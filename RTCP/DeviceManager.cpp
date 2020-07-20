@@ -5,27 +5,27 @@ HRESULT DeviceManager::InitializeDeviceResponsibilities(HWND hwnd)
 	HRESULT result = S_OK;
     return result;
 
-    ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(m_useWarp);
-    m_device = CreateDevice(dxgiAdapter4);
-    m_commandQueue = CreateCommandQueue(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    m_swapChain = CreateSwapChain(hwnd, m_commandQueue, m_windowWidth, m_windowHeight, m_frameCount);
+    //ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(m_useWarp);
+    //m_device = CreateDevice(dxgiAdapter4);
+    //m_commandQueue = CreateCommandQueue(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    //m_swapChain = CreateSwapChain(hwnd, m_commandQueue, m_windowWidth, m_windowHeight, m_frameCount);
 
-    m_currentBackBufferIndex = m_swapChain->GetCurrentBackBufferIndex();
-    m_rtvDescriptorHeap = CreateDescriptorHeap(m_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, m_frameCount);
-    m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    //m_currentBackBufferIndex = m_swapChain->GetCurrentBackBufferIndex();
+    //m_rtvDescriptorHeap = CreateDescriptorHeap(m_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, m_frameCount);
+    //m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-    UpdateRenderTargetViews(m_device, m_swapChain, m_rtvDescriptorHeap);
+    //UpdateRenderTargetViews(m_device, m_swapChain, m_rtvDescriptorHeap);
 
-    for (int i = 0; i < m_frameCount; ++i)
-    {
-        m_commandAllocators[i] = CreateCommandAllocator(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    }
-    m_commandList = CreateCommandList(m_device, m_commandAllocators[m_currentBackBufferIndex], D3D12_COMMAND_LIST_TYPE_DIRECT);
+    //for (int i = 0; i < m_frameCount; ++i)
+    //{
+    //    m_commandAllocators[i] = CreateCommandAllocator(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    //}
+    //m_commandList = CreateCommandList(m_device, m_commandAllocators[m_currentBackBufferIndex], D3D12_COMMAND_LIST_TYPE_DIRECT);
 
-    m_fence = CreateFence(m_device);
-    m_fenceEvent = CreateEventHandle();
-    
-    m_tearingSupported = CheckTearingSupport();
+    //m_fence = CreateFence(m_device);
+    //m_fenceEvent = CreateEventHandle();
+    //
+    //m_tearingSupported = CheckTearingSupport();
 
 	return result;
 }
@@ -35,45 +35,63 @@ HRESULT DeviceManager::CreateWindowResources(HWND hwnd)
 	return E_NOTIMPL;
 }
 
-ComPtr<IDXGISwapChain4> DeviceManager::CreateSwapChain(HWND hwnd, ComPtr<ID3D12CommandQueue> commandQueue, int width, int height, int bufferCount) const
+ComPtr<IDXGISwapChain3> DeviceManager::CreateSwapChain(HWND hwnd, ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<IDXGIFactory4> dxgiFactory, int width, int height, int bufferCount) const
 {
-    ComPtr<IDXGISwapChain4> swapChain4;
-    IDXGIFactory4* dxgiFactory;
-    UINT createFactoryFlags = 0;
-#if defined(_DEBUG)
-    createFactoryFlags = DXGI_CREATE_FACTORY_DEBUG;
-#endif
-
-    ThrowIfFailed(CreateDXGIFactory2(createFactoryFlags, IID_PPV_ARGS(&dxgiFactory)));
-
-    DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
-    swapChainDesc.Width = width;
-    swapChainDesc.Height = height;
-    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapChainDesc.Stereo = FALSE;
-    swapChainDesc.SampleDesc = { 1, 0 };
-    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    ComPtr<IDXGISwapChain3> swapChain3;
+ 
+    DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
     swapChainDesc.BufferCount = bufferCount;
-    swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
+    swapChainDesc.BufferDesc.Width = width;
+    swapChainDesc.BufferDesc.Height = height;
+    swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-    swapChainDesc.Flags = CheckTearingSupport() ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
+    swapChainDesc.OutputWindow = hwnd;
+    swapChainDesc.SampleDesc.Count = 1;
+    swapChainDesc.Windowed = TRUE;
 
-    ComPtr<IDXGISwapChain1> swapChain1;
-    ThrowIfFailed(dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, &swapChain1));
-    ThrowIfFailed(swapChain1.As(&swapChain4));
+    ComPtr<IDXGISwapChain> swapChain;
+    ThrowIfFailed(dxgiFactory->CreateSwapChain(
+        commandQueue.Get(),        // Swap chain needs the queue so that it can force a flush on it.
+        &swapChainDesc,
+        &swapChain
+    ));
 
-    return swapChain4.Get();
+    ThrowIfFailed(swapChain.As(&swapChain3));
+
+    return swapChain3;
 }
 
-ComPtr<ID3D12Device2> DeviceManager::CreateDevice(ComPtr<IDXGIAdapter4> adapter) const
+ComPtr<ID3D12Device2> DeviceManager::CreateDevice(ComPtr<IDXGIFactory4> dxgiFactory) const
 {
-    ComPtr<ID3D12Device2> d3d12Device2;
-    ThrowIfFailed(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&d3d12Device2)));
+    ComPtr<ID3D12Device2> device;
+
+    if (m_useWarp)
+    {
+        ComPtr<IDXGIAdapter> warpAdapter;
+        ThrowIfFailed(dxgiFactory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter)));
+
+        ThrowIfFailed(D3D12CreateDevice(
+            warpAdapter.Get(),
+            D3D_FEATURE_LEVEL_11_0,
+            IID_PPV_ARGS(&device)
+        ));
+    }
+    else
+    {
+        ComPtr<IDXGIAdapter1> hardwareAdapter;
+        GetHardwareAdapter(dxgiFactory.Get(), &hardwareAdapter);
+
+        ThrowIfFailed(D3D12CreateDevice(
+            hardwareAdapter.Get(),
+            D3D_FEATURE_LEVEL_11_0,
+            IID_PPV_ARGS(&device)
+        ));
+    }
 
 #if defined(_DEBUG)
     ComPtr<ID3D12InfoQueue> pInfoQueue;
-    if (SUCCEEDED(d3d12Device2.As(&pInfoQueue)))
+    if (SUCCEEDED(device.As(&pInfoQueue)))
     {
         pInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
         pInfoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
@@ -96,8 +114,7 @@ ComPtr<ID3D12Device2> DeviceManager::CreateDevice(ComPtr<IDXGIAdapter4> adapter)
         ThrowIfFailed(pInfoQueue->PushStorageFilter(&newFilter));
     }
 #endif
-
-    return d3d12Device2.Get();
+    return device;
 }
 
 ComPtr<ID3D12CommandQueue> DeviceManager::CreateCommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type) const
@@ -286,6 +303,29 @@ void DeviceManager::UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr
         device->CreateRenderTargetView(backBuffer, nullptr, rtvHandle);
         m_backBuffers[i] = backBuffer;
         rtvHandle.Offset(rtvDescriptorSize);
+    }
+}
+
+void DeviceManager::GetHardwareAdapter(IDXGIFactory4* pFactory, IDXGIAdapter1** ppAdapter) const
+{
+    *ppAdapter = nullptr;
+    for (UINT adapterIndex = 0; ; ++adapterIndex)
+    {
+        IDXGIAdapter1* pAdapter = nullptr;
+        if (DXGI_ERROR_NOT_FOUND == pFactory->EnumAdapters1(adapterIndex, &pAdapter))
+        {
+            // No more adapters to enumerate.
+            break;
+        }
+
+        // Check to see if the adapter supports Direct3D 12, but don't create the
+        // actual device yet.
+        if (SUCCEEDED(D3D12CreateDevice(pAdapter, D3D_FEATURE_LEVEL_11_0, _uuidof(ID3D12Device), nullptr)))
+        {
+            *ppAdapter = pAdapter;
+            return;
+        }
+        pAdapter->Release();
     }
 }
 

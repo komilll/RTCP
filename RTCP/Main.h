@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "DeviceManager.h"
 #include "Renderer.h"
+#include "InputManager.h"
 
 class Main
 {
@@ -29,5 +30,8 @@ private:
 
 static std::shared_ptr<DeviceManager> m_deviceManager;
 static std::shared_ptr<Renderer> m_renderer;
+static std::shared_ptr<InputManager> m_inputManager;
 static bool m_isInitialized;
 static Main* self;
+static std::wstring m_windowClassName = L"RTCP";
+static HINSTANCE m_hInstance;

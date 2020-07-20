@@ -7,13 +7,15 @@ HRESULT Main::InitializeWindow(HINSTANCE hInstance, std::shared_ptr<DeviceManage
     m_deviceManager = deviceManager;
     assert(m_deviceManager && "Device manager is null");
 
-    const wchar_t* windowClassName = L"Ray-tracing | Culling Project";
+    m_hInstance = hInstance;
+    assert(m_hInstance && "hInstance is null");
+
     ::SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     EnableDebugLayer();
 
-    RegisterWindowClass(hInstance, windowClassName);
+    RegisterWindowClass(hInstance, m_windowClassName.c_str());
 
-    m_hwnd = CreateWindow(windowClassName, hInstance, L"RTCP", m_deviceManager->GetWindowSize().first, m_deviceManager->GetWindowSize().second);
+    m_hwnd = CreateWindow(m_windowClassName.c_str(), hInstance, L"RTCP", m_deviceManager->GetWindowSize().first, m_deviceManager->GetWindowSize().second);
     ::GetWindowRect(m_hwnd, &m_windowRect);
 
     self = this;
@@ -25,19 +27,43 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
 {
     HRESULT result = S_OK;
 
+    m_inputManager = std::shared_ptr<InputManager>(new InputManager());
     m_deviceManager = deviceManager;
     m_renderer = renderer;
 
     m_isInitialized = true;
     ::ShowWindow(m_hwnd, SW_SHOW);
 
+    bool bGotMsg;
     MSG msg = {};
     while (msg.message != WM_QUIT)
     {
-        if (::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        bGotMsg = ::PeekMessage(&msg, NULL, 0, 0, PM_REMOVE);
+        if (bGotMsg)
         {
             ::TranslateMessage(&msg);
             ::DispatchMessage(&msg);
+        }
+        if (msg.message == WM_PAINT)
+        {
+            //Change camera position
+            {
+                constexpr float xStrengthPosition = 1.0f;
+                constexpr float yStrengthPosition = xStrengthPosition;
+                constexpr float zStrengthPosition = xStrengthPosition;
+                const float x = xStrengthPosition * (m_inputManager->IsKeyDown(VK_A) ? -1.0f : (m_inputManager->IsKeyDown(VK_D) ? 1.0f : 0.0f));
+                const float y = yStrengthPosition * (m_inputManager->IsKeyDown(VK_E) ? 1.0f : (m_inputManager->IsKeyDown(VK_Q) ? -1.0f : 0.0f));
+                const float z = zStrengthPosition * (m_inputManager->IsKeyDown(VK_W) ? 1.0f : (m_inputManager->IsKeyDown(VK_S) ? -1.0f : 0.0f));
+                renderer->AddCameraPosition(x, y, z);
+            }
+            //Change camera rotation
+            {
+                constexpr float xStrengthRotation = 1.0f;
+                constexpr float yStrengthRotation = xStrengthRotation;
+                const float x = xStrengthRotation * (m_inputManager->IsKeyDown(VK_LEFT) ? -1.0f : (m_inputManager->IsKeyDown(VK_RIGHT) ? 1.0f : 0.0f));
+                const float y = yStrengthRotation * (m_inputManager->IsKeyDown(VK_UP) ? -1.0f : (m_inputManager->IsKeyDown(VK_DOWN) ? 1.0f : 0.0f));
+                renderer->AddCameraRotation(y, x, 0.0f);
+            }
         }
     }
 
@@ -61,6 +87,7 @@ LRESULT Main::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
         case WM_PAINT:
             self->Update();
+            m_renderer->OnUpdate();
             m_renderer->Render();
             break;
 
@@ -70,39 +97,66 @@ LRESULT Main::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
             switch (wParam)
             {
-            case 'V':
-                m_deviceManager->ToggleVSync();
-                break;
+                case VK_ESCAPE:
+                    ::PostQuitMessage(0);
+                    break;
 
-            case VK_ESCAPE:
-                ::PostQuitMessage(0);
-                break;
+                case VK_RETURN:
+                    if (alt)
+                    {
+                        case VK_F11:
+                            self->ToggleFullscreen();
+                            break;
+                    }
+                default:
+                    m_inputManager->KeyDown(static_cast<unsigned int>(wParam));
+                    break;
+                    //case 'W':
+                    //    m_renderer->AddCameraPosition(0.0f, 0.0f, 1.0f);
+                    //    break;
 
-            case VK_RETURN:
-                if (alt)
-                {
-                    case VK_F11:
-                        self->ToggleFullscreen();
-                        break;
-                }
+                    //case 'S':
+                    //    m_renderer->AddCameraPosition(0.0f, 0.0f, -1.0f);
+                    //    break;
+
+                    //case VK_UP:
+                    //    m_renderer->AddCameraPosition(0.0f, 1.0f, 0.0f);
+                    //    break;
+
+                    //case VK_DOWN:
+                    //    m_renderer->AddCameraPosition(0.0f, -1.0f, 0.0f);
+                    //    break;
+
+                    //case 'V':
+                    //    m_deviceManager->ToggleVSync();
+                    //    break;
             }
-            break;
+            return 0;
 
-        case WM_SYSCHAR:
-            break;
+        case WM_KEYUP:
+            m_inputManager->KeyUp(static_cast<unsigned int>(wParam));
+            return 0;
 
-        case WM_SIZE:
-            ::GetClientRect(self->m_hwnd, &clientRect);
+        //case WM_SIZE:
+        //    ::GetClientRect(self->m_hwnd, &clientRect);
 
-            width = clientRect.right - clientRect.left;
-            height = clientRect.bottom - clientRect.top;
+        //    width = clientRect.right - clientRect.left;
+        //    height = clientRect.bottom - clientRect.top;
 
-            m_deviceManager->Resize(width, height);
-            break;
+        //    m_deviceManager->Resize(width, height);
+        //    break;
 
         case WM_DESTROY:
             ::PostQuitMessage(0);
             break;
+
+        case WM_CLOSE:
+            if (GetMenu(hwnd)) {
+                DestroyMenu(GetMenu(hwnd));
+            }
+            DestroyWindow(hwnd);
+            UnregisterClass(m_windowClassName.c_str(), m_hInstance);
+            return 0;
 
         default:
             return ::DefWindowProcW(hwnd, message, wParam, lParam);

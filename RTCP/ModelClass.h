@@ -20,11 +20,10 @@ public:
 
 	struct VertexBufferStruct {
 		XMFLOAT3 position;
-		XMFLOAT3 color;
-		//XMFLOAT3 normal;
-		//XMFLOAT3 tangent;
-		//XMFLOAT3 binormal;
-		//XMFLOAT2 uv;
+		XMFLOAT3 normal;
+		XMFLOAT3 tangent;
+		XMFLOAT3 binormal;
+		XMFLOAT2 uv;
 	};
 
 	struct Bounds {
@@ -87,7 +86,7 @@ public:
 	//void CreatePlane(ComPtr<ID3D12Device2> device, XMFLOAT2 size);
 	//void CreateCube(ComPtr<ID3D12Device2> device, XMFLOAT3 min, XMFLOAT3 max);
 	void SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList> commandList, float left = -1.0f, float right = 1.0f, float top = 1.0f, float bottom = -1.0f);
-	//void LoadModel(std::string path, ComPtr<ID3D12Device2> device);
+	void LoadModel(std::string path, ComPtr<ID3D12Device2> device);
 	Mesh GetMesh(int index) const { return m_meshes.at(index); };
 	std::vector<Mesh> GetMeshes() const { return m_meshes; };
 	//Return indices to render count
@@ -96,8 +95,8 @@ public:
 	//Bounds GetBounds(int meshIndex = 0);
 
 private:
-	//void ProcessNode(aiNode* node, const aiScene* scene);
-	//Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene);
+	void ProcessNode(aiNode* node, const aiScene* scene);
+	Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene);
 
 	bool CreateRectangle(ComPtr<ID3D12Device2> device, float left, float right, float top, float bottom);
 

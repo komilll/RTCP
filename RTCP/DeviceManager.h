@@ -17,6 +17,10 @@ public:
 	ComPtr<ID3D12Device2> GetDevice() const { return m_device; };
 	ComPtr<ID3D12CommandQueue> GetCommandQueue() const { return m_commandQueue; };
 
+	ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIFactory4> dxgiFactory) const;
+	ComPtr<ID3D12CommandQueue> CreateCommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type) const;
+	ComPtr<IDXGISwapChain3> CreateSwapChain(HWND hwnd, ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<IDXGIFactory4> dxgiFactory, int width, int height, int bufferCount) const;
+
 	int ExecuteCommandList();
 	void WaitForFenceValue(int fenceValue);
 	
@@ -29,9 +33,6 @@ public:
 	bool ToggleVSync();
 
 private:
-	ComPtr<IDXGISwapChain4> CreateSwapChain(HWND hwnd, ComPtr<ID3D12CommandQueue> commandQueue, int width, int height, int bufferCount) const;
-	ComPtr<ID3D12CommandQueue> CreateCommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type) const;
-	ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIAdapter4> adapter) const;
 	ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, int numDescriptors) const;
 	ComPtr<ID3D12CommandAllocator> CreateCommandAllocator(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type) const;
 	ComPtr<ID3D12GraphicsCommandList> CreateCommandList(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandAllocator> commandAllocator, D3D12_COMMAND_LIST_TYPE type) const;
@@ -47,7 +48,7 @@ private:
 	int Signal(ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<ID3D12Fence> fence, int& fenceValue);
 
 	void UpdateRenderTargetViews(ComPtr<ID3D12Device2> device, ComPtr<IDXGISwapChain4> swapChain, ComPtr<ID3D12DescriptorHeap> descriptorHeap);
-
+	void GetHardwareAdapter(IDXGIFactory4* pFactory, IDXGIAdapter1** ppAdapter) const;
 
 private:
 	static constexpr int m_frameCount = 2;
