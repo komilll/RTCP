@@ -66,6 +66,13 @@ private:
 	} ConstantBufferStruct;
 	static_assert((sizeof(ConstantBufferStruct) % 256) == 0, "Constant Buffer size must be 256-byte aligned");
 
+	typedef struct _uberBufferStruct {
+		XMFLOAT3 viewPosition;
+
+		float padding[61];
+	} UberBufferStruct;
+	static_assert((sizeof(UberBufferStruct) % 256) == 0, "Uber Buffer size must be 256-byte aligned");
+
 	ComPtr<ID3D12Device2> m_device = NULL;
 	static constexpr int m_frameCount = 2;
 
@@ -78,34 +85,53 @@ private:
 
 	std::shared_ptr<DeviceManager> m_deviceManager  = NULL;
 	ComPtr<ID3D12GraphicsCommandList> m_commandList = NULL;
+	ComPtr<ID3D12GraphicsCommandList> m_commandListSkybox = NULL;
 	ComPtr<ID3D12CommandQueue> m_commandQueue		= NULL;
 	ComPtr<IDXGISwapChain3> m_swapChain				= NULL;
 	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
 	ComPtr<ID3D12CommandAllocator> m_commandAllocators[m_frameCount];
+	ComPtr<ID3D12CommandAllocator> m_commandAllocatorsSkybox[m_frameCount];
 	ComPtr<ID3D12DescriptorHeap> m_rtvDescriptorHeap;
 	UINT m_rtvDescriptorSize;
 
-	ComPtr<ID3D12DescriptorHeap> m_textureHeap;
+	ComPtr<ID3D12DescriptorHeap> m_srvHeap;
+	ComPtr<ID3D12Resource> m_texture;
+	ComPtr<ID3D12Resource> m_skyboxTexture;
 
-	ComPtr<ID3D12Resource> m_vertexBuffer = NULL;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	ComPtr<ID3D12Resource> m_vertexBufferCube = NULL;
+	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferViewCube;
+	ComPtr<ID3D12Resource> m_vertexBufferSphere = NULL;
+	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferViewSphere;
 
-	ComPtr<ID3D12Resource> m_indexBuffer = NULL;
-	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
-	UINT m_indicesCount = 0;
+	ComPtr<ID3D12Resource> m_indexBufferCube = NULL;
+	ComPtr<ID3D12Resource> m_indexBufferSphere = NULL;
+	D3D12_INDEX_BUFFER_VIEW m_indexBufferViewCube;
+	D3D12_INDEX_BUFFER_VIEW m_indexBufferViewSphere;
+	UINT m_indicesCountCube = 0;
+	UINT m_indicesCountSphere = 0;
 
-	UINT8* m_pCbvDataBegin = nullptr;
-	ComPtr<ID3D12DescriptorHeap> m_cbvHeap;
-	ComPtr<ID3D12Resource> m_constantBuffer = NULL;
+	UINT8* m_pConstantBufferDataBegin = nullptr;
+	UINT8* m_pUberBufferDataBegin = nullptr;
+
+	UINT8* m_pConstantBufferDataBeginSkybox = nullptr;
 	ConstantBufferStruct m_constantBufferData;
+	UberBufferStruct m_uberBufferData;
+
+	ComPtr<ID3D12Resource> m_constantBuffers[2];
+	ComPtr<ID3D12Resource> m_constantBufferSkyboxMatrices;
+
+	// Depth stencil view (DSV)
+	ComPtr<ID3D12Resource> m_depthStencil;
+	ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
 
 	CD3DX12_VIEWPORT m_viewport;
 	CD3DX12_RECT m_scissorRect;
 
 	ComPtr<ID3D12Resource> m_depthBuffer		= NULL;
-	ComPtr<ID3D12DescriptorHeap> m_dsvHeap		= NULL;
 	ComPtr<ID3D12RootSignature> m_rootSignature = NULL;
+	ComPtr<ID3D12RootSignature> m_rootSignatureSkybox = NULL;
 	ComPtr<ID3D12PipelineState> m_pipelineState = NULL;
+	ComPtr<ID3D12PipelineState> m_pipelineStateSkybox = NULL;
 
 	//ComPtr<ID3D12Resource> albedoTexture;
 	//ComPtr<ID3D12Resource> normalTexture;

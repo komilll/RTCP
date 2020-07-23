@@ -1,4 +1,6 @@
 #pragma once
+#ifndef _PCH_H_
+#define _PCH_H_
 
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
@@ -39,3 +41,9 @@ using namespace Microsoft::WRL;
 #include <chrono>
 
 #include "Helpers.h"
+
+#if (_WIN32_WINNT >= 0x0A00 /*_WIN32_WINNT_WIN10*/)
+#pragma comment(lib,"runtimeobject.lib")
+#endif
+
+#endif // !_PCH_H_

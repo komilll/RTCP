@@ -1,6 +1,9 @@
 #ifndef _PIXEL_SHADER_HLSL
 #define _PIXEL_SHADER_HLSL
 
+Texture2D g_texture : register(t0);
+SamplerState g_sampler : register(s0);
+
 struct PixelInputType
 {
 	float4 position : SV_POSITION;
@@ -12,7 +15,8 @@ struct PixelInputType
 
 float4 main(PixelInputType input) : SV_TARGET
 {
-	return float4(input.normal, 1.0f);
+	//return float4(1, 0, 0, 1);
+	return float4(g_texture.Sample(g_sampler, input.uv).rgb, 1.0f);
 }
 
 #endif //_PIXEL_SHADER_HLSL
