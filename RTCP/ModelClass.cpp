@@ -1,5 +1,10 @@
 #include "ModelClass.h"
 
+ModelClass::ModelClass(std::string path, ComPtr<ID3D12Device2> device)
+{
+	LoadModel(path, device);
+}
+
 void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device)
 {
 	Assimp::Importer importer;
@@ -13,7 +18,7 @@ void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device)
 
 	assert(scene);
 	ProcessNode(scene->mRootNode, scene);
-	//assert(PrepareBuffers(device));
+	assert(PrepareBuffers(device) && "Failed to prepare buffers");
 }
 
 void ModelClass::ProcessNode(aiNode* node, const aiScene* scene)
@@ -184,32 +189,59 @@ bool ModelClass::CreateRectangle(ComPtr<ID3D12Device2> device, float left, float
 	return true;
 }
 
-bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList> commandList)
+bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device)
 {
 	Mesh mesh = GetMesh(0);
 
-	// Buffer which is used to CPU-GPU communication for vertex data
-	ComPtr<ID3D12Resource> intermediateVertexBuffer = NULL;
-	UpdateBufferResource(device, commandList, &m_vertexBuffer, &intermediateVertexBuffer, mesh.vertices.size(), sizeof(VertexBufferStruct), &mesh.vertices);
+	const UINT vertexBufferSize = static_cast<UINT>(sizeof(ModelClass::VertexBufferStruct)) * static_cast<UINT>(mesh.vertices.size());
 
-	// Create vertex buffer view
+	ThrowIfFailed(device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_vertexBuffer)));
+
+	// Copy the triangle data to the vertex buffer.
+	UINT8* pVertexDataBegin;
+	CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+	ThrowIfFailed(m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
+	memcpy(pVertexDataBegin, &mesh.vertices[0], vertexBufferSize);
+	m_vertexBuffer->Unmap(0, nullptr);
+
+	// Initialize the vertex buffer view.
 	m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-	m_vertexBufferView.SizeInBytes = sizeof(&mesh.vertices);
-	m_vertexBufferView.StrideInBytes = sizeof(VertexBufferStruct);
+	m_vertexBufferView.StrideInBytes = sizeof(ModelClass::VertexBufferStruct);
+	m_vertexBufferView.SizeInBytes = vertexBufferSize;
 
-	// Index buffer
-	ComPtr<ID3D12Resource> intermediateIndexBuffer = NULL;
-	UpdateBufferResource(device, commandList, &m_indexBuffer, &intermediateIndexBuffer, mesh.indices.size(), sizeof(unsigned int), &mesh.indices);
+	// Create index buffer
+	const UINT indexBufferSize = sizeof(mesh.indices);
+	m_indicesCount = static_cast<UINT>(mesh.indices.size());
 
-	// Create index buffer view
+	ThrowIfFailed(device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_indexBuffer)));
+
+	// Copy the triangle data to the vertex buffer.
+	UINT8* pIndexDataBegin;
+	ThrowIfFailed(m_indexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin)));
+	memcpy(pIndexDataBegin, &mesh.indices[0], sizeof(mesh.indices));
+	m_indexBuffer->Unmap(0, nullptr);
+
+	// Initialize the vertex buffer view.
 	m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
 	m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
-	m_indexBufferView.SizeInBytes = sizeof(mesh.indices);
+	m_indexBufferView.SizeInBytes = indexBufferSize;
 
 	return true;
 }
 
-void ModelClass::UpdateBufferResource(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList> commandList, ID3D12Resource** pDestinationResource, ID3D12Resource** pIntermediateResource, size_t numElements, size_t elementSize, const void* bufferData, D3D12_RESOURCE_FLAGS flags)
+void ModelClass::UpdateBufferResource(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, ID3D12Resource** pDestinationResource, ID3D12Resource** pIntermediateResource, size_t numElements, size_t elementSize, const void* bufferData, D3D12_RESOURCE_FLAGS flags)
 {
 	size_t bufferSize = numElements * elementSize;
 	{
@@ -234,8 +266,8 @@ void ModelClass::UpdateBufferResource(ComPtr<ID3D12Device2> device, ComPtr<ID3D1
 	}
 }
 
-void ModelClass::SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList> commandList, float left, float right, float top, float bottom)
+void ModelClass::SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, float left, float right, float top, float bottom)
 {
 	assert(CreateRectangle(device, left, right, top, bottom) && "Failed to create full screen rectangle");
-	assert(PrepareBuffers(device, commandList) && "Failed to prepare buffers");
+	assert(PrepareBuffers(device) && "Failed to prepare buffers");
 }

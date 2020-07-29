@@ -62,9 +62,9 @@ ComPtr<IDXGISwapChain3> DeviceManager::CreateSwapChain(HWND hwnd, ComPtr<ID3D12C
     return swapChain3;
 }
 
-ComPtr<ID3D12Device2> DeviceManager::CreateDevice(ComPtr<IDXGIFactory4> dxgiFactory) const
+ComPtr<ID3D12Device5> DeviceManager::CreateDevice(ComPtr<IDXGIFactory4> dxgiFactory) const
 {
-    ComPtr<ID3D12Device2> device;
+    ComPtr<ID3D12Device5> device;
 
     if (m_useWarp)
     {
@@ -153,9 +153,9 @@ ComPtr<ID3D12CommandAllocator> DeviceManager::CreateCommandAllocator(ComPtr<ID3D
     return commandAllocator;
 }
 
-ComPtr<ID3D12GraphicsCommandList> DeviceManager::CreateCommandList(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandAllocator> commandAllocator, D3D12_COMMAND_LIST_TYPE type) const
+ComPtr<ID3D12GraphicsCommandList4> DeviceManager::CreateCommandList(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandAllocator> commandAllocator, D3D12_COMMAND_LIST_TYPE type) const
 {
-    ComPtr<ID3D12GraphicsCommandList> commandList;
+    ComPtr<ID3D12GraphicsCommandList4> commandList;
     ThrowIfFailed(device->CreateCommandList(0, type, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList)));
     ThrowIfFailed(commandList->Close());
 

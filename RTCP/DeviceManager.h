@@ -13,11 +13,11 @@ public:
 
 	ComPtr<ID3D12CommandAllocator> GetCurrentCommandAllocator() const { return m_commandAllocators[m_currentBackBufferIndex]; };
 	ComPtr<ID3D12Resource> GetCurrentBackBufferResource() const { return m_backBuffers[m_currentBackBufferIndex]; };
-	ComPtr<ID3D12GraphicsCommandList> GetCommandList() const { return m_commandList; };
+	ComPtr<ID3D12GraphicsCommandList4> GetCommandList() const { return m_commandList; };
 	ComPtr<ID3D12Device2> GetDevice() const { return m_device; };
 	ComPtr<ID3D12CommandQueue> GetCommandQueue() const { return m_commandQueue; };
 
-	ComPtr<ID3D12Device2> CreateDevice(ComPtr<IDXGIFactory4> dxgiFactory) const;
+	ComPtr<ID3D12Device5> CreateDevice(ComPtr<IDXGIFactory4> dxgiFactory) const;
 	ComPtr<ID3D12CommandQueue> CreateCommandQueue(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type) const;
 	ComPtr<IDXGISwapChain3> CreateSwapChain(HWND hwnd, ComPtr<ID3D12CommandQueue> commandQueue, ComPtr<IDXGIFactory4> dxgiFactory, int width, int height, int bufferCount) const;
 
@@ -35,7 +35,7 @@ public:
 private:
 	ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(ComPtr<ID3D12Device2> device, D3D12_DESCRIPTOR_HEAP_TYPE type, int numDescriptors) const;
 	ComPtr<ID3D12CommandAllocator> CreateCommandAllocator(ComPtr<ID3D12Device2> device, D3D12_COMMAND_LIST_TYPE type) const;
-	ComPtr<ID3D12GraphicsCommandList> CreateCommandList(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandAllocator> commandAllocator, D3D12_COMMAND_LIST_TYPE type) const;
+	ComPtr<ID3D12GraphicsCommandList4> CreateCommandList(ComPtr<ID3D12Device2> device, ComPtr<ID3D12CommandAllocator> commandAllocator, D3D12_COMMAND_LIST_TYPE type) const;
 	ComPtr<ID3D12Fence> CreateFence(ComPtr<ID3D12Device2> device) const;
 	HANDLE CreateEventHandle() const;
 
@@ -62,7 +62,7 @@ private:
 	ComPtr<IDXGISwapChain4> m_swapChain				= NULL;
 	ComPtr<ID3D12Device2> m_device					= NULL;
 	ComPtr<ID3D12CommandQueue> m_commandQueue		= NULL;
-	ComPtr<ID3D12GraphicsCommandList> m_commandList	= NULL;
+	ComPtr<ID3D12GraphicsCommandList4> m_commandList	= NULL;
 	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
 	ComPtr<ID3D12CommandAllocator> m_commandAllocators[m_frameCount];
 

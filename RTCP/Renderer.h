@@ -7,6 +7,7 @@
 #include "ModelClass.h"
 
 using namespace DirectX;
+typedef std::array<D3D12_INPUT_ELEMENT_DESC, 5> BasicInputLayout;
 
 class Renderer
 {
@@ -28,10 +29,6 @@ public:
 	void AddCameraRotation(XMFLOAT3 addRot);
 
 private:
-	void UpdateBufferResource(ComPtr<ID3D12GraphicsCommandList> commandList, ID3D12Resource** pDestinationResource, ID3D12Resource** pIntermediateResource, size_t numElements, size_t elementSize, const void* bufferData, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE, bool setName = false, LPCWSTR newName = L"");
-
-	void ResizeDepthBuffer(int width, int height);
-
 	void LoadPipeline(HWND hwnd);
 	void LoadAssets();
 
@@ -40,9 +37,47 @@ private:
 
 	void MoveToNextFrame();
 
-	void GetHardwareAdapter(IDXGIFactory4* pFactory, IDXGIAdapter1** ppAdapter);
-
 	void CreateViewAndPerspective();
+
+	void CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ComPtr<ID3D12RootSignature>& rootSignature);
+
+	CD3DX12_DEPTH_STENCIL_DESC1 CreateDefaultDepthStencilDesc();
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC CreateDefaultPSO(BasicInputLayout inputElementDescs, ComPtr<ID3DBlob> vertexShader, ComPtr<ID3DBlob> pixelShader, D3D12_DEPTH_STENCIL_DESC depthStencilDesc, ComPtr<ID3D12RootSignature> rootSignature);
+
+	BasicInputLayout CreateBasicInputLayout();
+	
+	void CreateTextureRTCP(ComPtr<ID3D12Resource>& texture, ComPtr<ID3D12GraphicsCommandList4> commandList, const wchar_t* path, ComPtr<ID3D12Resource>& uploadHeap);
+
+	// Raytracing functions
+	struct Viewport
+	{
+		float left;
+		float top;
+		float right;
+		float bottom;
+	};
+
+	struct RayGenConstantBuffer
+	{
+		Viewport viewport;
+		Viewport stencil;
+	};
+
+	ComPtr<ID3D12Resource> m_blasScratch = NULL;
+	ComPtr<ID3D12Resource> m_blasResult  = NULL;
+
+	RayGenConstantBuffer m_rayGenCB;
+	ComPtr<ID3D12RootSignature> m_raytracingGlobalRootSignature;
+	ComPtr<ID3D12RootSignature> m_raytracingLocalRootSignature;
+
+	void PrepareRaytracingResources();
+
+	void CreateBLAS(std::shared_ptr<ModelClass> model);
+	void CreateTLAS();
+
+	void CreateRootSignatureForRaytracing();
+
+	void SerializeAndCreateRaytracingRootSignature(D3D12_ROOT_SIGNATURE_DESC& desc, ComPtr<ID3D12RootSignature>* rootSig);
 
 private:
 	// CONST PROPERTIES
@@ -51,6 +86,9 @@ private:
 
 	// DEBUG PROPERTIES
 	bool FREEZE_CAMERA = false;
+
+	// DEFINES
+	#define ROOT_SIGNATURE_PIXEL D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;// | //D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 
 	// Camera settings
 	XMFLOAT3 m_cameraPosition{ 0,0,0 };
@@ -73,7 +111,7 @@ private:
 	} UberBufferStruct;
 	static_assert((sizeof(UberBufferStruct) % 256) == 0, "Uber Buffer size must be 256-byte aligned");
 
-	ComPtr<ID3D12Device2> m_device = NULL;
+	ComPtr<ID3D12Device5> m_device = NULL;
 	static constexpr int m_frameCount = 2;
 
 	static constexpr int m_windowWidth = 1280;
@@ -84,8 +122,8 @@ private:
 	int m_frameIndex = 0;
 
 	std::shared_ptr<DeviceManager> m_deviceManager  = NULL;
-	ComPtr<ID3D12GraphicsCommandList> m_commandList = NULL;
-	ComPtr<ID3D12GraphicsCommandList> m_commandListSkybox = NULL;
+	ComPtr<ID3D12GraphicsCommandList4> m_commandList = NULL;
+	ComPtr<ID3D12GraphicsCommandList4> m_commandListSkybox = NULL;
 	ComPtr<ID3D12CommandQueue> m_commandQueue		= NULL;
 	ComPtr<IDXGISwapChain3> m_swapChain				= NULL;
 	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
@@ -97,18 +135,6 @@ private:
 	ComPtr<ID3D12DescriptorHeap> m_srvHeap;
 	ComPtr<ID3D12Resource> m_texture;
 	ComPtr<ID3D12Resource> m_skyboxTexture;
-
-	ComPtr<ID3D12Resource> m_vertexBufferCube = NULL;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferViewCube;
-	ComPtr<ID3D12Resource> m_vertexBufferSphere = NULL;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferViewSphere;
-
-	ComPtr<ID3D12Resource> m_indexBufferCube = NULL;
-	ComPtr<ID3D12Resource> m_indexBufferSphere = NULL;
-	D3D12_INDEX_BUFFER_VIEW m_indexBufferViewCube;
-	D3D12_INDEX_BUFFER_VIEW m_indexBufferViewSphere;
-	UINT m_indicesCountCube = 0;
-	UINT m_indicesCountSphere = 0;
 
 	UINT8* m_pConstantBufferDataBegin = nullptr;
 	UINT8* m_pUberBufferDataBegin = nullptr;
@@ -133,12 +159,8 @@ private:
 	ComPtr<ID3D12PipelineState> m_pipelineState = NULL;
 	ComPtr<ID3D12PipelineState> m_pipelineStateSkybox = NULL;
 
-	//ComPtr<ID3D12Resource> albedoTexture;
-	//ComPtr<ID3D12Resource> normalTexture;
-	//ComPtr<ID3D12Resource> roughnessTexture;
-	//ComPtr<ID3D12Resource> metalnessTexture;
-
-	std::unique_ptr<ModelClass> m_model = NULL;
+	std::shared_ptr<ModelClass> m_modelCube = NULL;
+	std::shared_ptr<ModelClass> m_modelSphere = NULL;
 
 	bool m_contentLoaded = false;
 
