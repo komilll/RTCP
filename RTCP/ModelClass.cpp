@@ -193,50 +193,56 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device)
 {
 	Mesh mesh = GetMesh(0);
 
-	const UINT vertexBufferSize = static_cast<UINT>(sizeof(ModelClass::VertexBufferStruct)) * static_cast<UINT>(mesh.vertices.size());
+	// Create vertex buffer
+	{
+		const UINT vertexBufferSize = static_cast<UINT>(sizeof(ModelClass::VertexBufferStruct)) * static_cast<UINT>(mesh.vertices.size());
 
-	ThrowIfFailed(device->CreateCommittedResource(
-		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		IID_PPV_ARGS(&m_vertexBuffer)));
+		ThrowIfFailed(device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&m_vertexBuffer)));
 
-	// Copy the triangle data to the vertex buffer.
-	UINT8* pVertexDataBegin;
-	CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
-	ThrowIfFailed(m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
-	memcpy(pVertexDataBegin, &mesh.vertices[0], vertexBufferSize);
-	m_vertexBuffer->Unmap(0, nullptr);
+		// Copy the triangle data to the vertex buffer.
+		UINT8* pVertexDataBegin;
+		CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+		ThrowIfFailed(m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
+		memcpy(pVertexDataBegin, &mesh.vertices[0], vertexBufferSize);
+		m_vertexBuffer->Unmap(0, nullptr);
 
-	// Initialize the vertex buffer view.
-	m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-	m_vertexBufferView.StrideInBytes = sizeof(ModelClass::VertexBufferStruct);
-	m_vertexBufferView.SizeInBytes = vertexBufferSize;
+		// Initialize the vertex buffer view.
+		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
+		m_vertexBufferView.StrideInBytes = sizeof(ModelClass::VertexBufferStruct);
+		m_vertexBufferView.SizeInBytes = vertexBufferSize;
+	}
 
 	// Create index buffer
-	const UINT indexBufferSize = sizeof(mesh.indices);
-	m_indicesCount = static_cast<UINT>(mesh.indices.size());
+	{
+		const UINT indexBufferSize = mesh.indices.size() * 4;
+		m_indicesCount = static_cast<UINT>(mesh.indices.size());
 
-	ThrowIfFailed(device->CreateCommittedResource(
-		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize),
-		D3D12_RESOURCE_STATE_GENERIC_READ,
-		nullptr,
-		IID_PPV_ARGS(&m_indexBuffer)));
+		ThrowIfFailed(device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+			D3D12_HEAP_FLAG_NONE,
+			&CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize),
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&m_indexBuffer)));
 
-	// Copy the triangle data to the vertex buffer.
-	UINT8* pIndexDataBegin;
-	ThrowIfFailed(m_indexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin)));
-	memcpy(pIndexDataBegin, &mesh.indices[0], sizeof(mesh.indices));
-	m_indexBuffer->Unmap(0, nullptr);
+		// Copy the triangle data to the vertex buffer.
+		UINT8* pIndexDataBegin;
+		CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+		ThrowIfFailed(m_indexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin)));
+		memcpy(pIndexDataBegin, &mesh.indices[0], indexBufferSize);
+		m_indexBuffer->Unmap(0, nullptr);
 
-	// Initialize the vertex buffer view.
-	m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
-	m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
-	m_indexBufferView.SizeInBytes = indexBufferSize;
+		// Initialize the vertex buffer view.
+		m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
+		m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+		m_indexBufferView.SizeInBytes = indexBufferSize;
+	}
 
 	return true;
 }
