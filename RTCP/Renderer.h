@@ -218,6 +218,9 @@ private:
 
 	void CreateRTPSO();
 
+public:
+	bool DO_RAYTRACING = false;
+
 private:
 	// CONST PROPERTIES
 	static constexpr float Z_NEAR = 0.01f;
@@ -290,7 +293,9 @@ private:
 	ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
 
 	CD3DX12_VIEWPORT m_viewport;
+	CD3DX12_VIEWPORT m_viewportPreview;
 	CD3DX12_RECT m_scissorRect;
+	CD3DX12_RECT m_scissorRectPreview;
 
 	ComPtr<ID3D12Resource> m_depthBuffer		= NULL;
 	ComPtr<ID3D12RootSignature> m_rootSignature = NULL;
@@ -298,6 +303,7 @@ private:
 	ComPtr<ID3D12PipelineState> m_pipelineState = NULL;
 	ComPtr<ID3D12PipelineState> m_pipelineStateSkybox = NULL;
 
+	std::shared_ptr<ModelClass> m_previewModel = NULL;
 	std::shared_ptr<ModelClass> m_modelCube = NULL;
 	std::shared_ptr<ModelClass> m_modelSphere = NULL;
 

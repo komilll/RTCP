@@ -19,7 +19,7 @@ struct RayPayload
 
 struct Attributes 
 {
-	float2 uv;
+	float2 bary;
 };
 
 // ---[ Constant Buffers ]---
@@ -51,26 +51,19 @@ StructuredBuffer<Vertex> vertices			  : register(t2);
 
 // ---[ Helper Functions ]---
 
-struct VertexAttributes
-{
-	float3 position;
-	float2 uv;
-};
-
-uint3 GetIndices(uint triangleIndex)
-{
-	uint baseIndex = (triangleIndex * 3);
-	int address = (baseIndex * 4);
-	return indices.Load3(address);
-}
+//uint3 GetIndices(uint triangleIndex)
+//{
+//	uint baseIndex = (triangleIndex * 3);
+//	int address = (baseIndex * 4);
+//	return indices.Load3(address);
+//}
 
 // Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
 float3 HitAttribute(float3 vertexAttribute[3], Attributes attrib)
 {
-	float3 barycentrics = float3((1.0f - attrib.uv.x - attrib.uv.y), attrib.uv.x, attrib.uv.y);
 	return vertexAttribute[0] +
-        barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
-        barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
+        attrib.bary.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        attrib.bary.y * (vertexAttribute[2] - vertexAttribute[0]);
 }
 
 // Diffuse lighting calculation.
@@ -83,6 +76,14 @@ float4 CalculateDiffuseLighting(float3 hitPosition, float3 normal)
 
 	return g_cubeCB.albedo * g_sceneCB.lightDiffuseColor * fNDotL;
 }
+
+
+uint3 Load3x32BitIndices(uint offsetBytes)
+{
+	// Load first 2 indices
+	return indices.Load3(offsetBytes);
+}
+
 
 // Load three 16 bit indices from a byte addressed buffer.
 uint3 Load3x16BitIndices(uint offsetBytes)
@@ -119,7 +120,7 @@ uint3 Load3x16BitIndices(uint offsetBytes)
 // Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
 inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
 {
-	float2 xy = index + 0.5f; // center in the middle of the pixel.
+	float2 xy = index + float2(0.5f, 0.5f); // center in the middle of the pixel.
 	float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0;
 
     // Invert Y for DirectX-style coordinates.
@@ -131,33 +132,20 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 	world.xyz /= world.w;
 	origin = g_sceneCB.cameraPosition.xyz;
 	direction = normalize(world.xyz - origin);
+	
+	//float2 currenPixelLocation = index + float2(0.5f, 0.5f);
+	//float2 pixelCenter = currenPixelLocation / dispatchRaysDimensions.xy;
+	//float2 ndc = float2(2, -2) * pixelCenter + float2(-1, 1);
+	//origin = g_sceneCB.cameraPosition.xyz;
+	//direction = normalize(ndc.x * g_sceneCB.cameraPosition.x +
+ //                              ndc.y * g_sceneCB.cameraPosition.y +
+ //                                      g_sceneCB.cameraPosition.z);
 }
 
 // Get hit position in world-space
 float3 HitWorldPosition()
 {
-	// https://docs.microsoft.com/en-us/windows/win32/direct3d12/worldrayorigin 
-	// https://docs.microsoft.com/en-us/windows/win32/direct3d12/raytcurrent 
-	// https://docs.microsoft.com/en-us/windows/win32/direct3d12/worldraydirection 
 	return WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
-}
-
-VertexAttributes GetVertexAttributes(uint triangleIndex, float3 barycentrics)
-{
-	uint3 indices = GetIndices(triangleIndex);
-	VertexAttributes v;
-	v.position = float3(0, 0, 0);
-	v.uv = float2(0, 0);
-
-	//for (uint i = 0; i < 3; i++)
-	//{
-	//	int address = (indices[i] * 5) * 4;
-	//	v.position += asfloat(vertices.Load3(address)) * barycentrics[i];
-	//	address += (3 * 4);
-	//	v.uv += asfloat(vertices.Load2(address)) * barycentrics[i];
-	//}
-
-	return v;
 }
 
 #endif // _COMMON_HLSL

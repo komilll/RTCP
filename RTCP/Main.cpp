@@ -64,6 +64,14 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
                 const float y = yStrengthRotation * (m_inputManager->IsKeyDown(VK_UP) ? -1.0f : (m_inputManager->IsKeyDown(VK_DOWN) ? 1.0f : 0.0f));
                 renderer->AddCameraRotation(y, x, 0.0f);
             }
+            // Change rendering mode
+            {
+                if (m_inputManager->IsKeyDown(VK_R))
+                {
+                    m_renderer->DO_RAYTRACING = !m_renderer->DO_RAYTRACING;
+                    m_inputManager->KeyUp(VK_R);
+                }
+            }
         }
     }
 

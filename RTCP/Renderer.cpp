@@ -16,10 +16,20 @@ Renderer::Renderer(std::shared_ptr<DeviceManager> deviceManager, HWND hwnd)
     m_viewport.Width = static_cast<float>(m_windowWidth);
     m_viewport.Height = static_cast<float>(m_windowHeight);
 
+    m_viewportPreview.TopLeftY = 0;
+    m_viewportPreview.TopLeftX = m_windowWidth * 0.7;
+    m_viewportPreview.Width = static_cast<float>(m_windowWidth * 0.3);
+    m_viewportPreview.Height = static_cast<float>(m_windowHeight * 0.3);
+
     m_scissorRect.left = 0;
     m_scissorRect.top = 0;
     m_scissorRect.right = static_cast<LONG>(m_windowWidth);
     m_scissorRect.bottom = static_cast<LONG>(m_windowHeight);
+
+    m_scissorRectPreview.left = 0;
+    m_scissorRectPreview.top = 0;
+    m_scissorRectPreview.right = static_cast<LONG>(m_windowWidth);
+    m_scissorRectPreview.bottom = static_cast<LONG>(m_windowHeight);
 
     m_rtvDescriptorSize = 0;
 
@@ -63,7 +73,15 @@ void Renderer::OnUpdate()
 
     {
         m_sceneBufferData.cameraPosition = XMFLOAT4(m_cameraPosition.x, m_cameraPosition.y, m_cameraPosition.z, 1.0f);
-        XMMATRIX viewProj = m_constantBufferData.view * m_constantBufferData.projection;
+        XMVECTOR eye = XMVECTOR{ m_cameraPosition.x, m_cameraPosition.y, m_cameraPosition.z };
+        XMMATRIX view = XMMatrixLookAtLH(eye, XMVECTOR{ 0,0,0 }, XMVECTOR{ 0, 1, 0 });
+        //XMMATRIX view = XMMatrixTranspose(m_constantBufferData.view);
+        //XMMATRIX proj = XMMatrixTranspose(m_constantBufferData.projection);
+
+        constexpr float FOV = 45.0f;
+        XMMATRIX proj = DirectX::XMMatrixPerspectiveFovLH(XMConvertToRadians(FOV), m_aspectRatio, Z_NEAR, Z_FAR);
+
+        XMMATRIX viewProj = XMMatrixMultiply(view, proj);
         m_sceneBufferData.projectionToWorld = XMMatrixInverse(nullptr, viewProj);
 
         XMFLOAT4 lightPosition = XMFLOAT4(0.0f, 1.8f, -3.0f, 0.0f);
@@ -332,6 +350,8 @@ void Renderer::LoadAssets()
     {
         m_modelCube = std::shared_ptr<ModelClass>(new ModelClass("cube.obj", m_device));
         m_modelSphere = std::shared_ptr<ModelClass>(new ModelClass("sphere.obj", m_device));
+        m_previewModel = std::shared_ptr<ModelClass>(new ModelClass());
+        m_previewModel->SetFullScreenRectangleModel(m_device, m_commandList, 0.75f, 1.0f, 1.0f, 0.75f * 1.666667f);
     }
 
     // Preparation of raytracing
@@ -441,6 +461,7 @@ void Renderer::LoadAssets()
 
 void Renderer::PopulateCommandList()
 {
+    if (DO_RAYTRACING)
     {
         ThrowIfFailed(m_commandAllocators[m_frameIndex]->Reset());
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), m_pipelineState.Get()));
@@ -509,9 +530,7 @@ void Renderer::PopulateCommandList()
         ThrowIfFailed(m_commandList->Close());
         ThrowIfFailed(m_commandListSkybox->Close());
     }
-
-    return;
-
+    else
     {
         ThrowIfFailed(m_commandAllocators[m_frameIndex]->Reset());
         ThrowIfFailed(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), m_pipelineState.Get()));

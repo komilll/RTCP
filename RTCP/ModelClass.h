@@ -13,6 +13,7 @@ using namespace DirectX;
 class ModelClass
 {
 public:
+	ModelClass() = default;
 	ModelClass(std::string path, ComPtr<ID3D12Device2> device);
 
 	//typedef struct _instanceType {
