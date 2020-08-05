@@ -5,7 +5,7 @@ ModelClass::ModelClass(std::string path, ComPtr<ID3D12Device2> device)
 	LoadModel(path, device);
 }
 
-void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device)
+void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device, DXGI_FORMAT indexFormat)
 {
 	Assimp::Importer importer;
 	char result[MAX_PATH];
@@ -18,7 +18,7 @@ void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device)
 
 	assert(scene);
 	ProcessNode(scene->mRootNode, scene);
-	assert(PrepareBuffers(device) && "Failed to prepare buffers");
+	assert(PrepareBuffers(device, indexFormat) && "Failed to prepare buffers");
 }
 
 void ModelClass::ProcessNode(aiNode* node, const aiScene* scene)
@@ -189,7 +189,7 @@ bool ModelClass::CreateRectangle(ComPtr<ID3D12Device2> device, float left, float
 	return true;
 }
 
-bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device)
+bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexFormat)
 {
 	Mesh mesh = GetMesh(0);
 
@@ -220,7 +220,20 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device)
 
 	// Create index buffer
 	{
-		const UINT indexBufferSize = mesh.indices.size() * 4;
+		int indicesByteMultiplier = -1;
+		if (indexFormat == DXGI_FORMAT_R32_UINT) {
+			indicesByteMultiplier = 4;
+		}
+		else if (indexFormat == DXGI_FORMAT_R16_UINT) {
+			indicesByteMultiplier = 2;
+		}
+		else
+		{
+			assert(false && "Unrecognized DXGI_FORMAT - only R16_UINT and R32_UINT are supported for index buffer in this project");
+			return false;
+		}
+
+		const UINT indexBufferSize = mesh.indices.size() * indicesByteMultiplier;
 		m_indicesCount = static_cast<UINT>(mesh.indices.size());
 
 		ThrowIfFailed(device->CreateCommittedResource(
@@ -240,7 +253,7 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device)
 
 		// Initialize the vertex buffer view.
 		m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
-		m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+		m_indexBufferView.Format = indexFormat;
 		m_indexBufferView.SizeInBytes = indexBufferSize;
 	}
 
@@ -272,8 +285,8 @@ void ModelClass::UpdateBufferResource(ComPtr<ID3D12Device2> device, ComPtr<ID3D1
 	}
 }
 
-void ModelClass::SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, float left, float right, float top, float bottom)
+void ModelClass::SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, float left, float right, float top, float bottom, DXGI_FORMAT indexFormat)
 {
 	assert(CreateRectangle(device, left, right, top, bottom) && "Failed to create full screen rectangle");
-	assert(PrepareBuffers(device) && "Failed to prepare buffers");
+	assert(PrepareBuffers(device, indexFormat) && "Failed to prepare buffers");
 }

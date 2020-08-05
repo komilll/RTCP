@@ -96,7 +96,7 @@ LRESULT Main::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_PAINT:
             self->Update();
             m_renderer->OnUpdate();
-            m_renderer->Render();
+            m_renderer->OnRender();
             break;
 
         case WM_SYSKEYDOWN:

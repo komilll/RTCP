@@ -31,6 +31,8 @@ struct SceneConstantBuffer
 	float4 lightPosition;
 	float4 lightAmbientColor;
 	float4 lightDiffuseColor;
+	
+	//float padding[32];
 };
 
 struct CubeConstantBuffer

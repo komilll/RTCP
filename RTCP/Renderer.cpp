@@ -16,29 +16,25 @@ Renderer::Renderer(std::shared_ptr<DeviceManager> deviceManager, HWND hwnd)
     m_viewport.Width = static_cast<float>(m_windowWidth);
     m_viewport.Height = static_cast<float>(m_windowHeight);
 
-    m_viewportPreview.TopLeftY = 0;
-    m_viewportPreview.TopLeftX = m_windowWidth * 0.7;
-    m_viewportPreview.Width = static_cast<float>(m_windowWidth * 0.3);
-    m_viewportPreview.Height = static_cast<float>(m_windowHeight * 0.3);
-
     m_scissorRect.left = 0;
     m_scissorRect.top = 0;
     m_scissorRect.right = static_cast<LONG>(m_windowWidth);
     m_scissorRect.bottom = static_cast<LONG>(m_windowHeight);
 
-    m_scissorRectPreview.left = 0;
-    m_scissorRectPreview.top = 0;
-    m_scissorRectPreview.right = static_cast<LONG>(m_windowWidth);
-    m_scissorRectPreview.bottom = static_cast<LONG>(m_windowHeight);
-
-    m_rtvDescriptorSize = 0;
-
-    m_cameraPosition = XMFLOAT3{ 0, 0, -100.0f };
+    m_cameraPosition = XMFLOAT3{ 1.0f, 1.2f, -3.0f };
+    CreateViewAndPerspective();
 }
 
-void Renderer::Render()
+void Renderer::OnRender()
 {
-    OnRender();
+    // Prepare commands to execute
+    PopulateCommandList();
+
+    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get(), m_commandListSkybox.Get() };
+    m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+
+    ThrowIfFailed(m_swapChain->Present(1, 0));
+    MoveToNextFrame();
 }
 
 void Renderer::OnInit(HWND hwnd)
@@ -50,65 +46,31 @@ void Renderer::OnInit(HWND hwnd)
 
 void Renderer::OnUpdate()
 {
+    CreateViewAndPerspective();
+    // Update vertexShader.hlsl
     {
-        CreateViewAndPerspective();
+        // Update data for single rasterized object
         m_constantBufferData.world = XMMatrixIdentity();
         memcpy(m_pConstantBufferDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
 
-        // Skybox
+        // Update data for skybox rendering
         XMFLOAT3 pos = XMFLOAT3{ m_cameraPosition.x - 0.5f, m_cameraPosition.y - 0.5f, m_cameraPosition.z - 0.5f };
         m_constantBufferData.world = XMMatrixIdentity();
         m_constantBufferData.world = XMMatrixMultiply(m_constantBufferData.world, XMMatrixScaling(1.0f, 1.0f, 1.0f));
         m_constantBufferData.world = XMMatrixMultiply(m_constantBufferData.world, XMMatrixTranslation(pos.x, pos.y, pos.z));
         m_constantBufferData.world = XMMatrixTranspose(m_constantBufferData.world);
-
-        // Uber buffer memcpy
         memcpy(m_pConstantBufferDataBeginSkybox, &m_constantBufferData, sizeof(m_constantBufferData));
+
+        // Update - uber buffer
         m_uberBufferData.viewPosition = m_cameraPosition;
-        for (auto& p : m_uberBufferData.padding) {
-            p = {};
-        }
         memcpy(m_pUberBufferDataBegin, &m_uberBufferData, sizeof(m_uberBufferData));
     }
-
+    // Update raygeneration cbuffer - scene CB
     {
-        m_sceneBufferData.cameraPosition = XMFLOAT4(m_cameraPosition.x, m_cameraPosition.y, m_cameraPosition.z, 1.0f);
-        XMVECTOR eye = XMVECTOR{ m_cameraPosition.x, m_cameraPosition.y, m_cameraPosition.z };
-        XMMATRIX view = XMMatrixLookAtLH(eye, XMVECTOR{ 0,0,0 }, XMVECTOR{ 0, 1, 0 });
-        //XMMATRIX view = XMMatrixTranspose(m_constantBufferData.view);
-        //XMMATRIX proj = XMMatrixTranspose(m_constantBufferData.projection);
-
-        constexpr float FOV = 45.0f;
-        XMMATRIX proj = DirectX::XMMatrixPerspectiveFovLH(XMConvertToRadians(FOV), m_aspectRatio, Z_NEAR, Z_FAR);
-
-        XMMATRIX viewProj = XMMatrixMultiply(view, proj);
-        m_sceneBufferData.projectionToWorld = XMMatrixInverse(nullptr, viewProj);
-
-        XMFLOAT4 lightPosition = XMFLOAT4(0.0f, 1.8f, -3.0f, 0.0f);
-        XMFLOAT4 lightAmbientColor = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-        XMFLOAT4 lightDiffuseColor = XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f);
-        m_sceneBufferData.lightPosition = lightPosition;
-        m_sceneBufferData.lightAmbientColor = lightAmbientColor;
-        m_sceneBufferData.lightDiffuseColor = lightDiffuseColor;
-
-        // Uber buffer memcpy
+        XMMATRIX viewProj = XMMatrixMultiply(XMMatrixTranspose(m_constantBufferData.view), XMMatrixTranspose(m_constantBufferData.projection));
+        m_sceneBufferData.projectionToWorld = XMMatrixTranspose(XMMatrixInverse(nullptr, viewProj));
         memcpy(m_sceneBufferDataBegin, &m_sceneBufferData, sizeof(m_sceneBufferData));
     }
-}
-
-void Renderer::OnRender()
-{
-    // Record all the commands we need to render the scene into the command list.
-    PopulateCommandList();
-
-    // Execute the command list.
-    ID3D12CommandList* ppCommandLists[] = { m_commandList.Get(), m_commandListSkybox.Get() };
-    m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
-
-    // Present the frame.
-    ThrowIfFailed(m_swapChain->Present(1, 0));
-
-    MoveToNextFrame();
 }
 
 void Renderer::OnDestroy()
@@ -128,10 +90,6 @@ void Renderer::AddCameraPosition(float x, float y, float z)
         m_cameraPositionStoredInFrame.z = z;
         CreateViewAndPerspective();
     }
-    //if (x != 0 || y != 0 || z != 0)
-    //{
-    //    m_profiler->ResetProfiling();
-    //}
 }
 
 void Renderer::AddCameraPosition(XMFLOAT3 addPos)
@@ -150,14 +108,11 @@ void Renderer::AddCameraRotation(float x, float y, float z)
             m_cameraRotation.y -= 360.0f;
         else if (m_cameraRotation.y < -360.0f)
             m_cameraRotation.y += 360.0f;
+        // Avoid gimbal lock problem, by avoiding reaching 90 deg
         m_cameraRotation.x = m_cameraRotation.x >= 90.0f ? 89.9f : (m_cameraRotation.x <= -90.0f ? -89.9f : m_cameraRotation.x);
 
         CreateViewAndPerspective();
     }
-    //if (x != 0 || y != 0 || z != 0)
-    //{
-    //    m_profiler->ResetProfiling();
-    //}
 }
 
 void Renderer::AddCameraRotation(XMFLOAT3 addRot)
@@ -405,37 +360,17 @@ void Renderer::LoadAssets()
 #endif
 
     ComPtr<ID3D12Resource> uploadHeap;
-
-    // Create texture
+    // Create texture for rasterized object
     {
         CreateTextureRTCP(m_texture, m_commandList, L"Pebles.png", uploadHeap);
-
-        // Describe and create a SRV for the texture.
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Texture2D.MipLevels = 1;
-
-        CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), 0, m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
-        m_device->CreateShaderResourceView(m_texture.Get(), &srvDesc, srvHandle);
+        CreateSRV_Texture2D(m_texture, m_srvHeap.Get(), 0, m_device.Get());
     }
 
     ComPtr<ID3D12Resource> skyboxUploadHeap;
-
     // Create skybox texture
     {
         CreateTextureRTCP(m_skyboxTexture, m_commandListSkybox, L"Skyboxes/cubemap.dds", skyboxUploadHeap);
-
-        // Describe and create a SRV for the texture.
-        D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-        srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-        srvDesc.Texture2D.MipLevels = 1;
-
-        CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(m_srvHeap->GetCPUDescriptorHandleForHeapStart(), 1, m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
-        m_device->CreateShaderResourceView(m_skyboxTexture.Get(), &srvDesc, srvHandle);
+        CreateSRV_TextureCube(m_skyboxTexture, m_srvHeap.Get(), 1, m_device.Get());
     }
 
     // Close the command list and execute it to begin the initial GPU setup.
@@ -642,7 +577,7 @@ void Renderer::CreateViewAndPerspective()
     //Update camera position for shader buffer
     if (!FREEZE_CAMERA)
     {
-        //m_uberBufferData.viewerPosition = m_cameraPosition;
+        m_sceneBufferData.cameraPosition = XMFLOAT4{ m_cameraPosition.x, m_cameraPosition.y, m_cameraPosition.z, 1.0f };
     }
 
     // Create the rotation matrix from the yaw, pitch, and roll values.
@@ -678,11 +613,7 @@ void Renderer::CreateViewAndPerspective()
 
     //Create perspective matrix
     constexpr float FOV = 3.14f / 4.0f;
-    //const float aspectRatio = m_windowHeight / m_windowWidth;
-    const float aspectRatio = static_cast<float>(m_windowWidth) / static_cast<float>(m_windowHeight);
-    m_constantBufferData.projection = DirectX::XMMatrixTranspose(DirectX::XMMatrixPerspectiveFovLH(FOV, aspectRatio, Z_NEAR, Z_FAR));
-    //Store projection matrix in SSAO as soon as it changes
-    //m_specialBufferSSAOData.projectionMatrix = m_constantBufferData.projection;
+    m_constantBufferData.projection = DirectX::XMMatrixTranspose(DirectX::XMMatrixPerspectiveFovLH(FOV, m_aspectRatio, Z_NEAR, Z_FAR));
 }
 
 void Renderer::CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ComPtr<ID3D12RootSignature> &rootSignature)
@@ -705,6 +636,30 @@ void Renderer::CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, C
     ComPtr<ID3DBlob> error;
     ThrowIfFailed(D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error));
     ThrowIfFailed(m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+}
+
+void Renderer::CreateSRV(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc)
+{
+    CD3DX12_CPU_DESCRIPTOR_HANDLE srvHandle(srvHeap->GetCPUDescriptorHandleForHeapStart(), srvIndex, device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+    device->CreateShaderResourceView(resource.Get(), &srvDesc, srvHandle);
+}
+
+void Renderer::CreateSRV_Texture2D(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc)
+{
+    srvDesc.Texture2D.MipLevels = mipLevels;
+    CreateSRV(resource, srvHeap, srvIndex, device, srvDesc);
+}
+
+void Renderer::CreateSRV_Texture3D(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc)
+{
+    srvDesc.Texture3D.MipLevels = mipLevels;
+    CreateSRV(resource, srvHeap, srvIndex, device, srvDesc);
+}
+
+void Renderer::CreateSRV_TextureCube(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc)
+{
+    srvDesc.TextureCube.MipLevels = mipLevels;
+    CreateSRV(resource, srvHeap, srvIndex, device, srvDesc);
 }
 
 CD3DX12_DEPTH_STENCIL_DESC1 Renderer::CreateDefaultDepthStencilDesc()
@@ -821,11 +776,13 @@ void Renderer::CreateTextureRTCP(ComPtr<ID3D12Resource>& texture, ComPtr<ID3D12G
 
 void Renderer::PrepareRaytracingResources()
 {
+    InitializeRaytracingBufferValues();
+
     InitShaderCompiler(m_shaderCompiler);
 
-    CreateBLAS(m_modelSphere);
+    CreateBLAS(m_modelCube);
     CreateTLAS();
-    CreateDxrPipelineAssets(m_modelSphere.get());
+    CreateDxrPipelineAssets(m_modelCube.get());
 
     CreateRayGenShader(m_shaderCompiler);
     CreateMissShader(m_shaderCompiler);
@@ -1214,6 +1171,15 @@ void Renderer::Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, RtProgram& 
 {
     Compile_Shader(compilerInfo, program.info, &program.blob);
     program.SetBytecode();
+}
+
+void Renderer::InitializeRaytracingBufferValues()
+{
+    m_sceneBufferData.lightPosition = XMFLOAT4(0.0f, 1.8f, -3.0f, 0.0f);
+    m_sceneBufferData.lightAmbientColor = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+    m_sceneBufferData.lightDiffuseColor = XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f);
+
+    m_cubeBufferData.albedo = XMFLOAT4{ 0.5f, 0, 0, 1.0f };
 }
 
 void Renderer::CreateMissShader(D3D12ShaderCompilerInfo& shaderCompiler)

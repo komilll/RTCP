@@ -51,6 +51,9 @@
     <ClInclude Include="dxc\dxcapi.use.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="BufferStructures.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
