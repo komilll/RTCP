@@ -1,112 +1,20 @@
 #pragma once
 
-#include "pch.h"
-#include "DeviceManager.h"
 #pragma comment(lib, "d3dcompiler.lib")
 #include <d3dcompiler.h>
+
+#include "pch.h"
+#include "DeviceManager.h"
 #include "ModelClass.h"
 #include "BufferStructures.h"
-
-#include "dxc/dxcapi.h"
-#include "dxc/dxcapi.use.h"
+#include "CBuffer.h"
+#include "RaytracingShadersHelper.h"
 
 using namespace DirectX;
 typedef std::array<D3D12_INPUT_ELEMENT_DESC, 5> BasicInputLayout;
 
 // DEFINES
 #define ROOT_SIGNATURE_PIXEL D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;// | //D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
-
-struct D3D12ShaderCompilerInfo
-{
-	dxc::DxcDllSupport		DxcDllHelper;
-	IDxcCompiler* compiler = nullptr;
-	IDxcLibrary* library = nullptr;
-};
-
-struct D3D12ShaderInfo
-{
-	LPCWSTR		filename = nullptr;
-	LPCWSTR		entryPoint = nullptr;
-	LPCWSTR		targetProfile = nullptr;
-	LPCWSTR* arguments = nullptr;
-	DxcDefine* defines = nullptr;
-	UINT32		argCount = 0;
-	UINT32		defineCount = 0;
-
-	D3D12ShaderInfo() {}
-	D3D12ShaderInfo(LPCWSTR inFilename, LPCWSTR inEntryPoint, LPCWSTR inProfile)
-	{
-		filename = inFilename;
-		entryPoint = inEntryPoint;
-		targetProfile = inProfile;
-	}
-};
-
-struct RtProgram
-{
-	D3D12ShaderInfo			info = {};
-	IDxcBlob* blob = nullptr;
-	ID3D12RootSignature* pRootSignature = nullptr;
-
-	D3D12_DXIL_LIBRARY_DESC	dxilLibDesc{};
-	D3D12_EXPORT_DESC		exportDesc{};
-	D3D12_STATE_SUBOBJECT	subobject{};
-	std::wstring			exportName{};
-
-	RtProgram()
-	{
-		exportDesc.ExportToRename = nullptr;
-	}
-
-	RtProgram(D3D12ShaderInfo shaderInfo)
-	{
-		info = shaderInfo;
-		subobject.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
-		exportName = shaderInfo.entryPoint;
-		exportDesc.ExportToRename = nullptr;
-		exportDesc.Flags = D3D12_EXPORT_FLAG_NONE;
-	}
-
-	void SetBytecode()
-	{
-		exportDesc.Name = exportName.c_str();
-
-		dxilLibDesc.NumExports = 1;
-		dxilLibDesc.pExports = &exportDesc;
-		dxilLibDesc.DXILLibrary.BytecodeLength = blob->GetBufferSize();
-		dxilLibDesc.DXILLibrary.pShaderBytecode = blob->GetBufferPointer();
-
-		subobject.pDesc = &dxilLibDesc;
-	}
-
-};
-
-struct HitProgram
-{
-	RtProgram ahs;
-	RtProgram chs;
-
-	std::wstring exportName;
-	D3D12_HIT_GROUP_DESC desc = {};
-	D3D12_STATE_SUBOBJECT subobject = {};
-
-	HitProgram() {}
-	HitProgram(LPCWSTR name) : exportName(name)
-	{
-		desc = {};
-		desc.HitGroupExport = exportName.c_str();
-		subobject.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
-		subobject.pDesc = &desc;
-	}
-
-	void SetExports(bool anyHit)
-	{
-		desc.HitGroupExport = exportName.c_str();
-		if (anyHit) desc.AnyHitShaderImport = ahs.exportDesc.Name;
-		desc.ClosestHitShaderImport = chs.exportDesc.Name;
-	}
-
-};
 
 class Renderer
 {
@@ -125,6 +33,9 @@ public:
 	void AddCameraPosition(XMFLOAT3 addPos);
 	void AddCameraRotation(float x, float y, float z);
 	void AddCameraRotation(XMFLOAT3 addRot);
+
+	// Modifying rendering state - DEBUG
+	void ToggleRaytracing() { DO_RAYTRACING = !DO_RAYTRACING; };
 
 private:
 	// Prepare pipeline and load data to start rendering
@@ -157,7 +68,7 @@ private:
 	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, D3D12ShaderInfo& info, IDxcBlob** blob);
 	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, RtProgram& program);
 
-#pragma region Raytracing
+#pragma region Raytracing functions
 	// Main function, invoked to prepare DXR pipeline
 	void PrepareRaytracingResources();
 
@@ -178,23 +89,91 @@ private:
 
 #pragma endregion
 
-	// Raytracing functions
-	struct Viewport
-	{
-		float left;
-		float top;
-		float right;
-		float bottom;
-	};
+private:
+	// CONST PROPERTIES
+	static constexpr float Z_NEAR = 0.01f;
+	static constexpr float Z_FAR = 200.0f;
+	static constexpr int m_frameCount = 2;
+	static constexpr int m_windowWidth = 1280;
+	static constexpr int m_windowHeight = 720;
+	static constexpr float m_aspectRatio = static_cast<float>(m_windowWidth) / static_cast<float>(m_windowHeight);
 
+	// DEBUG PROPERTIES
+	bool FREEZE_CAMERA = false;
+	bool DO_RAYTRACING = false;
+
+	// Camera settings
+	XMFLOAT3 m_cameraPosition{ 0,0,0 };
+	XMFLOAT3 m_cameraRotation{ 0,0,0 };
+	XMFLOAT3 m_cameraPositionStoredInFrame{ 0,0,0 };
+
+	// Helper variables
+	UINT m_rtvDescriptorSize = 0;
+
+	// Pipeline variables - device, commandQueue, swap chain
+	int m_frameIndex = 0;
+	ComPtr<ID3D12Device5> m_device					= NULL;
+	std::shared_ptr<DeviceManager> m_deviceManager	= NULL;
+	ComPtr<ID3D12CommandQueue> m_commandQueue		= NULL;
+	ComPtr<IDXGISwapChain3> m_swapChain				= NULL;
+
+	// Viewport related variables
+	CD3DX12_VIEWPORT m_viewport;
+	CD3DX12_RECT m_scissorRect;
+
+#pragma region Pushing data to GPU - variable references
+	// Command lists
+	ComPtr<ID3D12GraphicsCommandList4> m_commandList = NULL;
+	ComPtr<ID3D12GraphicsCommandList4> m_commandListSkybox = NULL;
+
+	// Command allocators
+	ComPtr<ID3D12CommandAllocator> m_commandAllocators[m_frameCount];
+	ComPtr<ID3D12CommandAllocator> m_commandAllocatorsSkybox[m_frameCount];
+
+	// Descriptor heaps
+	ComPtr<ID3D12DescriptorHeap> m_rtvDescriptorHeap;
+	ComPtr<ID3D12DescriptorHeap> m_srvHeap;
+
+	// Root signatures/PSO
+	ComPtr<ID3D12RootSignature> m_rootSignature = NULL;
+	ComPtr<ID3D12PipelineState> m_pipelineState = NULL;
+	ComPtr<ID3D12RootSignature> m_rootSignatureSkybox = NULL;
+	ComPtr<ID3D12PipelineState> m_pipelineStateSkybox = NULL;
+#pragma endregion
+
+#pragma region Resource variables
+	// Depth stencil view (DSV)
+	ComPtr<ID3D12Resource> m_depthStencil;
+	ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
+	ComPtr<ID3D12Resource> m_depthBuffer = NULL;
+
+	// Constant buffers
+	CBuffer<SceneConstantBuffer> m_sceneBuffer;
+	CBuffer<CubeConstantBuffer> m_cubeBuffer;
+	CBuffer<UberBufferStruct> m_uberBuffer;
+	CBuffer<ConstantBufferStruct> m_constantBuffer;
+	CBuffer<ConstantBufferStruct> m_constantBufferSkybox;
+
+	// Textures
+	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
+	ComPtr<ID3D12Resource> m_texture;
+	ComPtr<ID3D12Resource> m_skyboxTexture;
+
+	// Models
+	std::shared_ptr<ModelClass> m_previewModel = NULL;
+	std::shared_ptr<ModelClass> m_modelCube = NULL;
+	std::shared_ptr<ModelClass> m_modelSphere = NULL;
+#pragma endregion
+	
+#pragma region Raytracing variables
 	// Raytracing - Acceleration structures - BLAS
 	ComPtr<ID3D12Resource> m_blasScratch = NULL;
-	ComPtr<ID3D12Resource> m_blasResult  = NULL;
+	ComPtr<ID3D12Resource> m_blasResult = NULL;
 
 	// Raytracing - Acceleration structures - TLAS
 	ComPtr<ID3D12Resource> m_tlasInstanceDesc = NULL;
-	ComPtr<ID3D12Resource> m_tlasScratch	  = NULL;
-	ComPtr<ID3D12Resource> m_tlasResult		  = NULL;
+	ComPtr<ID3D12Resource> m_tlasScratch = NULL;
+	ComPtr<ID3D12Resource> m_tlasResult = NULL;
 	UINT64 m_tlasSize;
 
 	// DXR - output texture and descriptor heap of resources
@@ -212,86 +191,9 @@ private:
 	ComPtr<ID3D12Resource> m_shaderTable;
 
 	// RTPSO
-	ComPtr<ID3D12StateObject> m_rtpso				= NULL;
+	ComPtr<ID3D12StateObject> m_rtpso = NULL;
 	ComPtr<ID3D12StateObjectProperties> m_rtpsoInfo = NULL;
-
-public:
-	bool DO_RAYTRACING = false;
-
-private:
-	// CONST PROPERTIES
-	static constexpr float Z_NEAR = 0.01f;
-	static constexpr float Z_FAR = 200.0f;
-	static constexpr int m_frameCount = 2;
-	static constexpr int m_windowWidth = 1280;
-	static constexpr int m_windowHeight = 720;
-	static constexpr float m_aspectRatio = static_cast<float>(m_windowWidth) / static_cast<float>(m_windowHeight);
-
-	// DEBUG PROPERTIES
-	bool FREEZE_CAMERA = false;
-
-	// Camera settings
-	XMFLOAT3 m_cameraPosition{ 0,0,0 };
-	XMFLOAT3 m_cameraRotation{ 0,0,0 };
-	XMFLOAT3 m_cameraPositionStoredInFrame{ 0,0,0 };
-
-	SceneConstantBuffer m_sceneBufferData;
-	CubeConstantBuffer m_cubeBufferData;
-	ComPtr<ID3D12Resource> m_sceneBuffer = NULL;
-	UINT8* m_sceneBufferDataBegin = nullptr;
-
-	ComPtr<ID3D12Resource> m_cubeBuffer = NULL;
-	UINT8* m_cubeBufferDataBegin = nullptr;
-
-	ComPtr<ID3D12Device5> m_device = NULL;
-
-	bool m_vSync = true;
-	bool m_tearingSupported = true;
-	int m_frameIndex = 0;
-
-	std::shared_ptr<DeviceManager> m_deviceManager  = NULL;
-	ComPtr<ID3D12GraphicsCommandList4> m_commandList = NULL;
-	ComPtr<ID3D12GraphicsCommandList4> m_commandListSkybox = NULL;
-	ComPtr<ID3D12CommandQueue> m_commandQueue		= NULL;
-	ComPtr<IDXGISwapChain3> m_swapChain				= NULL;
-	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
-	ComPtr<ID3D12CommandAllocator> m_commandAllocators[m_frameCount];
-	ComPtr<ID3D12CommandAllocator> m_commandAllocatorsSkybox[m_frameCount];
-	ComPtr<ID3D12DescriptorHeap> m_rtvDescriptorHeap;
-	UINT m_rtvDescriptorSize = 0;
-
-	ComPtr<ID3D12DescriptorHeap> m_srvHeap;
-	ComPtr<ID3D12Resource> m_texture;
-	ComPtr<ID3D12Resource> m_skyboxTexture;
-
-	UINT8* m_pConstantBufferDataBegin = nullptr;
-	UINT8* m_pUberBufferDataBegin = nullptr;
-
-	UINT8* m_pConstantBufferDataBeginSkybox = nullptr;
-	ConstantBufferStruct m_constantBufferData;
-	UberBufferStruct m_uberBufferData;
-
-	ComPtr<ID3D12Resource> m_constantBuffers[2];
-	ComPtr<ID3D12Resource> m_constantBufferSkyboxMatrices;
-
-	// Depth stencil view (DSV)
-	ComPtr<ID3D12Resource> m_depthStencil;
-	ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
-
-	CD3DX12_VIEWPORT m_viewport;
-	CD3DX12_RECT m_scissorRect;
-
-	ComPtr<ID3D12Resource> m_depthBuffer		= NULL;
-	ComPtr<ID3D12RootSignature> m_rootSignature = NULL;
-	ComPtr<ID3D12RootSignature> m_rootSignatureSkybox = NULL;
-	ComPtr<ID3D12PipelineState> m_pipelineState = NULL;
-	ComPtr<ID3D12PipelineState> m_pipelineStateSkybox = NULL;
-
-	std::shared_ptr<ModelClass> m_previewModel = NULL;
-	std::shared_ptr<ModelClass> m_modelCube = NULL;
-	std::shared_ptr<ModelClass> m_modelSphere = NULL;
-
-	bool m_contentLoaded = false;
+#pragma endregion
 
 	// Synchronization
 	ComPtr<ID3D12Fence> m_fence;

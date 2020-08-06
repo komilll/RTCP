@@ -18,7 +18,6 @@ private:
 	HWND CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst, const wchar_t* windowTitle, int width, int height);
 	void EnableDebugLayer();
 
-	void Update();
 	void ToggleFullscreen();
 
 private:

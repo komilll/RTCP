@@ -48,9 +48,7 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
         {
             //Change camera position
             {
-                constexpr float xStrengthPosition = 1.0f;
-                constexpr float yStrengthPosition = xStrengthPosition;
-                constexpr float zStrengthPosition = xStrengthPosition;
+                constexpr float xStrengthPosition = 1.0f, yStrengthPosition = 1.0f, zStrengthPosition = 1.0f;
                 const float x = xStrengthPosition * (m_inputManager->IsKeyDown(VK_A) ? -1.0f : (m_inputManager->IsKeyDown(VK_D) ? 1.0f : 0.0f));
                 const float y = yStrengthPosition * (m_inputManager->IsKeyDown(VK_E) ? 1.0f : (m_inputManager->IsKeyDown(VK_Q) ? -1.0f : 0.0f));
                 const float z = zStrengthPosition * (m_inputManager->IsKeyDown(VK_W) ? 1.0f : (m_inputManager->IsKeyDown(VK_S) ? -1.0f : 0.0f));
@@ -58,8 +56,7 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
             }
             //Change camera rotation
             {
-                constexpr float xStrengthRotation = 1.0f;
-                constexpr float yStrengthRotation = xStrengthRotation;
+                constexpr float xStrengthRotation = 1.0f, yStrengthRotation = 1.0f;
                 const float x = xStrengthRotation * (m_inputManager->IsKeyDown(VK_LEFT) ? -1.0f : (m_inputManager->IsKeyDown(VK_RIGHT) ? 1.0f : 0.0f));
                 const float y = yStrengthRotation * (m_inputManager->IsKeyDown(VK_UP) ? -1.0f : (m_inputManager->IsKeyDown(VK_DOWN) ? 1.0f : 0.0f));
                 renderer->AddCameraRotation(y, x, 0.0f);
@@ -68,7 +65,7 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
             {
                 if (m_inputManager->IsKeyDown(VK_R))
                 {
-                    m_renderer->DO_RAYTRACING = !m_renderer->DO_RAYTRACING;
+                    m_renderer->ToggleRaytracing();
                     m_inputManager->KeyUp(VK_R);
                 }
             }
@@ -76,9 +73,6 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
     }
 
     renderer->OnDestroy();
-    //deviceManager->FlushBackBuffer();
-    //deviceManager->CloseMainHandle();
-
     return result;
 }
 
@@ -94,7 +88,6 @@ LRESULT Main::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         switch (message)
         {
         case WM_PAINT:
-            self->Update();
             m_renderer->OnUpdate();
             m_renderer->OnRender();
             break;
@@ -119,40 +112,12 @@ LRESULT Main::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
                 default:
                     m_inputManager->KeyDown(static_cast<unsigned int>(wParam));
                     break;
-                    //case 'W':
-                    //    m_renderer->AddCameraPosition(0.0f, 0.0f, 1.0f);
-                    //    break;
-
-                    //case 'S':
-                    //    m_renderer->AddCameraPosition(0.0f, 0.0f, -1.0f);
-                    //    break;
-
-                    //case VK_UP:
-                    //    m_renderer->AddCameraPosition(0.0f, 1.0f, 0.0f);
-                    //    break;
-
-                    //case VK_DOWN:
-                    //    m_renderer->AddCameraPosition(0.0f, -1.0f, 0.0f);
-                    //    break;
-
-                    //case 'V':
-                    //    m_deviceManager->ToggleVSync();
-                    //    break;
             }
             return 0;
 
         case WM_KEYUP:
             m_inputManager->KeyUp(static_cast<unsigned int>(wParam));
             return 0;
-
-        //case WM_SIZE:
-        //    ::GetClientRect(self->m_hwnd, &clientRect);
-
-        //    width = clientRect.right - clientRect.left;
-        //    height = clientRect.bottom - clientRect.top;
-
-        //    m_deviceManager->Resize(width, height);
-        //    break;
 
         case WM_DESTROY:
             ::PostQuitMessage(0);
@@ -239,11 +204,6 @@ void Main::EnableDebugLayer()
     ThrowIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(&debugInterface)));
     debugInterface->EnableDebugLayer();
 #endif
-}
-
-void Main::Update()
-{
-
 }
 
 void Main::ToggleFullscreen()

@@ -18,9 +18,9 @@ static_assert((sizeof(ConstantBufferStruct) % 256) == 0, "Constant Buffer size m
 typedef struct _uberBufferStruct {
 	XMFLOAT3 viewPosition;
 
-	float padding[61];
+	float padding;
 } UberBufferStruct;
-static_assert((sizeof(UberBufferStruct) % 256) == 0, "Uber Buffer size must be 256-byte aligned");
+static_assert((sizeof(UberBufferStruct) % 16) == 0, "Uber Buffer size must be 16-byte aligned");
 
 typedef struct _sceneConstantBuffer
 {

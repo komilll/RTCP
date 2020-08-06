@@ -50,26 +50,26 @@ void Renderer::OnUpdate()
     // Update vertexShader.hlsl
     {
         // Update data for single rasterized object
-        m_constantBufferData.world = XMMatrixIdentity();
-        memcpy(m_pConstantBufferDataBegin, &m_constantBufferData, sizeof(m_constantBufferData));
+        m_constantBuffer.value.world = XMMatrixIdentity();
+        memcpy(m_constantBuffer.ptr, &m_constantBuffer.value, sizeof(m_constantBuffer.value));
 
         // Update data for skybox rendering
         XMFLOAT3 pos = XMFLOAT3{ m_cameraPosition.x - 0.5f, m_cameraPosition.y - 0.5f, m_cameraPosition.z - 0.5f };
-        m_constantBufferData.world = XMMatrixIdentity();
-        m_constantBufferData.world = XMMatrixMultiply(m_constantBufferData.world, XMMatrixScaling(1.0f, 1.0f, 1.0f));
-        m_constantBufferData.world = XMMatrixMultiply(m_constantBufferData.world, XMMatrixTranslation(pos.x, pos.y, pos.z));
-        m_constantBufferData.world = XMMatrixTranspose(m_constantBufferData.world);
-        memcpy(m_pConstantBufferDataBeginSkybox, &m_constantBufferData, sizeof(m_constantBufferData));
+        m_constantBuffer.value.world = XMMatrixIdentity();
+        m_constantBuffer.value.world = XMMatrixMultiply(m_constantBuffer.value.world, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+        m_constantBuffer.value.world = XMMatrixMultiply(m_constantBuffer.value.world, XMMatrixTranslation(pos.x, pos.y, pos.z));
+        m_constantBuffer.value.world = XMMatrixTranspose(m_constantBuffer.value.world);
+        memcpy(m_constantBufferSkybox.ptr, &m_constantBuffer.value, sizeof(m_constantBuffer.value));
 
         // Update - uber buffer
-        m_uberBufferData.viewPosition = m_cameraPosition;
-        memcpy(m_pUberBufferDataBegin, &m_uberBufferData, sizeof(m_uberBufferData));
+        m_uberBuffer.value.viewPosition = m_cameraPosition;
+        memcpy(m_uberBuffer.ptr, &m_uberBuffer.value, sizeof(m_uberBuffer.value));
     }
     // Update raygeneration cbuffer - scene CB
     {
-        XMMATRIX viewProj = XMMatrixMultiply(XMMatrixTranspose(m_constantBufferData.view), XMMatrixTranspose(m_constantBufferData.projection));
-        m_sceneBufferData.projectionToWorld = XMMatrixTranspose(XMMatrixInverse(nullptr, viewProj));
-        memcpy(m_sceneBufferDataBegin, &m_sceneBufferData, sizeof(m_sceneBufferData));
+        XMMATRIX viewProj = XMMatrixMultiply(XMMatrixTranspose(m_constantBuffer.value.view), XMMatrixTranspose(m_constantBuffer.value.projection));
+        m_sceneBuffer.value.projectionToWorld = XMMatrixTranspose(XMMatrixInverse(nullptr, viewProj));
+        memcpy(m_sceneBuffer.ptr, &m_sceneBuffer.value, sizeof(m_sceneBuffer.value));
     }
 }
 
@@ -315,33 +315,33 @@ void Renderer::LoadAssets()
     // Create the constant buffer
     {
         ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(ConstantBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_constantBuffers[0])
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(ConstantBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_constantBuffer.resource)
         ));
 
         ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(UberBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_constantBuffers[1])
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(UberBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_uberBuffer.resource)
         ));
 
         CD3DX12_RANGE readRange(0, 0);
-        ThrowIfFailed(m_constantBuffers[0]->Map(0, &readRange, reinterpret_cast<void**>(&m_pConstantBufferDataBegin)));
-        memcpy(m_pConstantBufferDataBegin, &m_constantBufferData, sizeof(ConstantBufferStruct));
-        m_constantBuffers[0]->Unmap(0, &readRange);
+        ThrowIfFailed(m_constantBuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&m_constantBuffer.ptr)));
+        memcpy(m_constantBuffer.ptr, &m_constantBuffer.value, sizeof(ConstantBufferStruct));
+        m_constantBuffer.resource->Unmap(0, &readRange);
 
-        ThrowIfFailed(m_constantBuffers[1]->Map(0, &readRange, reinterpret_cast<void**>(&m_pUberBufferDataBegin)));
-        memcpy(m_pUberBufferDataBegin, &m_uberBufferData, sizeof(UberBufferStruct));
-        m_constantBuffers[1]->Unmap(0, &readRange);
+        ThrowIfFailed(m_uberBuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&m_uberBuffer.ptr)));
+        memcpy(m_uberBuffer.ptr, &m_uberBuffer.value, sizeof(UberBufferStruct));
+        m_uberBuffer.resource->Unmap(0, &readRange);
     }
 
     // Create the constant buffer - SKYBOX
     {
         ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(ConstantBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_constantBufferSkyboxMatrices)
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(ConstantBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_constantBufferSkybox.resource)
         ));
 
         CD3DX12_RANGE readRange(0, 0);
-        ThrowIfFailed(m_constantBufferSkyboxMatrices->Map(0, &readRange, reinterpret_cast<void**>(&m_pConstantBufferDataBeginSkybox)));
-        memcpy(m_pConstantBufferDataBeginSkybox, &m_constantBufferData, sizeof(ConstantBufferStruct));
-        m_constantBufferSkyboxMatrices->Unmap(0, &readRange);
+        ThrowIfFailed(m_constantBufferSkybox.resource->Map(0, &readRange, reinterpret_cast<void**>(&m_constantBufferSkybox.ptr)));
+        memcpy(m_constantBufferSkybox.ptr, &m_constantBufferSkybox.value, sizeof(ConstantBufferStruct));
+        m_constantBufferSkybox.resource->Unmap(0, &readRange);
     }
 
 
@@ -479,7 +479,8 @@ void Renderer::PopulateCommandList()
         CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle1(m_srvHeap->GetGPUDescriptorHandleForHeapStart(), 1, m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
         m_commandList->SetGraphicsRootDescriptorTable(0, srvHandle0);
 
-        m_commandList->SetGraphicsRootConstantBufferView(1, m_constantBuffers[0]->GetGPUVirtualAddress());
+        m_commandList->SetGraphicsRootConstantBufferView(1, m_constantBuffer.resource->GetGPUVirtualAddress());
+        //m_commandList->SetGraphicsRootConstantBufferView(2, m_constantBuffers[1]->GetGPUVirtualAddress());
 
         m_commandList->RSSetViewports(1, &m_viewport);
         m_commandList->RSSetScissorRects(1, &m_scissorRect);
@@ -511,8 +512,8 @@ void Renderer::PopulateCommandList()
         m_commandListSkybox->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
         m_commandListSkybox->SetGraphicsRootDescriptorTable(0, srvHandle1);
 
-        m_commandListSkybox->SetGraphicsRootConstantBufferView(1, m_constantBufferSkyboxMatrices->GetGPUVirtualAddress());
-        m_commandListSkybox->SetGraphicsRootConstantBufferView(2, m_constantBuffers[1]->GetGPUVirtualAddress());
+        m_commandListSkybox->SetGraphicsRootConstantBufferView(1, m_constantBufferSkybox.resource->GetGPUVirtualAddress());
+        m_commandListSkybox->SetGraphicsRootConstantBufferView(2, m_uberBuffer.resource->GetGPUVirtualAddress());
 
         m_commandListSkybox->RSSetViewports(1, &m_viewport);
         m_commandListSkybox->RSSetScissorRects(1, &m_scissorRect);
@@ -577,7 +578,7 @@ void Renderer::CreateViewAndPerspective()
     //Update camera position for shader buffer
     if (!FREEZE_CAMERA)
     {
-        m_sceneBufferData.cameraPosition = XMFLOAT4{ m_cameraPosition.x, m_cameraPosition.y, m_cameraPosition.z, 1.0f };
+        m_sceneBuffer.value.cameraPosition = XMFLOAT4{ m_cameraPosition.x, m_cameraPosition.y, m_cameraPosition.z, 1.0f };
     }
 
     // Create the rotation matrix from the yaw, pitch, and roll values.
@@ -609,11 +610,11 @@ void Renderer::CreateViewAndPerspective()
     target = { m_cameraPosition.x + target.m128_f32[0], m_cameraPosition.y + target.m128_f32[1], m_cameraPosition.z + target.m128_f32[2], 0.0f };
 
     //Create view matrix
-    m_constantBufferData.view = DirectX::XMMatrixTranspose(DirectX::XMMatrixLookAtLH(eye, target, up));
+    m_constantBuffer.value.view = DirectX::XMMatrixTranspose(DirectX::XMMatrixLookAtLH(eye, target, up));
 
     //Create perspective matrix
     constexpr float FOV = 3.14f / 4.0f;
-    m_constantBufferData.projection = DirectX::XMMatrixTranspose(DirectX::XMMatrixPerspectiveFovLH(FOV, m_aspectRatio, Z_NEAR, Z_FAR));
+    m_constantBuffer.value.projection = DirectX::XMMatrixTranspose(DirectX::XMMatrixPerspectiveFovLH(FOV, m_aspectRatio, Z_NEAR, Z_FAR));
 }
 
 void Renderer::CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ComPtr<ID3D12RootSignature> &rootSignature)
@@ -968,25 +969,25 @@ void Renderer::CreateDxrPipelineAssets(ModelClass* model)
     // Create view buffer and material buffer
     {
         ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer((sizeof(SceneConstantBuffer) + 255) & ~255), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_sceneBuffer)
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer((sizeof(SceneConstantBuffer) + 255) & ~255), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_sceneBuffer.resource)
         ));
 
         {
             CD3DX12_RANGE readRange(0, 0);
-            ThrowIfFailed(m_sceneBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_sceneBufferDataBegin)));
-            memcpy(m_sceneBufferDataBegin, &m_sceneBufferData, sizeof(SceneConstantBuffer));
-            m_sceneBuffer->Unmap(0, &readRange);
+            ThrowIfFailed(m_sceneBuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&m_sceneBuffer.ptr)));
+            memcpy(m_sceneBuffer.ptr, &m_sceneBuffer.value, sizeof(SceneConstantBuffer));
+            m_sceneBuffer.resource->Unmap(0, &readRange);
         }
 
         ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer((sizeof(CubeConstantBuffer) + 255) & ~255), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_cubeBuffer)
+            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer((sizeof(CubeConstantBuffer) + 255) & ~255), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_cubeBuffer.resource)
         ));
 
         {
             CD3DX12_RANGE readRange(0, 0);
-            ThrowIfFailed(m_cubeBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_cubeBufferDataBegin)));
-            memcpy(m_cubeBufferDataBegin, &m_cubeBufferData, sizeof(SceneConstantBuffer));
-            m_cubeBuffer->Unmap(0, &readRange);
+            ThrowIfFailed(m_cubeBuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&m_cubeBuffer.ptr)));
+            memcpy(m_cubeBuffer.ptr, &m_cubeBuffer.value, sizeof(SceneConstantBuffer));
+            m_cubeBuffer.resource->Unmap(0, &readRange);
         }
     }
 
@@ -1014,14 +1015,14 @@ void Renderer::CreateDxrPipelineAssets(ModelClass* model)
 
         // Create the SceneCB CBV
         D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
-        cbvDesc.SizeInBytes = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(m_sceneBufferData));
-        cbvDesc.BufferLocation = m_sceneBuffer->GetGPUVirtualAddress();
+        cbvDesc.SizeInBytes = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(m_sceneBuffer.value));
+        cbvDesc.BufferLocation = m_sceneBuffer.resource->GetGPUVirtualAddress();
 
         m_device->CreateConstantBufferView(&cbvDesc, handle);
 
         // Create the CubeCB CBV
-        cbvDesc.SizeInBytes = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(m_cubeBufferData));
-        cbvDesc.BufferLocation = m_cubeBuffer->GetGPUVirtualAddress();
+        cbvDesc.SizeInBytes = ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(m_cubeBuffer.value));
+        cbvDesc.BufferLocation = m_cubeBuffer.resource->GetGPUVirtualAddress();
 
         handle.ptr += handleIncrement;
         m_device->CreateConstantBufferView(&cbvDesc, handle); 
@@ -1175,11 +1176,11 @@ void Renderer::Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, RtProgram& 
 
 void Renderer::InitializeRaytracingBufferValues()
 {
-    m_sceneBufferData.lightPosition = XMFLOAT4(0.0f, 1.8f, -3.0f, 0.0f);
-    m_sceneBufferData.lightAmbientColor = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-    m_sceneBufferData.lightDiffuseColor = XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f);
+    m_sceneBuffer.value.lightPosition = XMFLOAT4(0.0f, 1.8f, -3.0f, 0.0f);
+    m_sceneBuffer.value.lightAmbientColor = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+    m_sceneBuffer.value.lightDiffuseColor = XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f);
 
-    m_cubeBufferData.albedo = XMFLOAT4{ 0.5f, 0, 0, 1.0f };
+    m_cubeBuffer.value.albedo = XMFLOAT4{ 0.5f, 0, 0, 1.0f };
 }
 
 void Renderer::CreateMissShader(D3D12ShaderCompilerInfo& shaderCompiler)

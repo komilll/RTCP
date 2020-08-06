@@ -17,7 +17,10 @@ void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device, DXGI_
 	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_OptimizeMeshes | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
 
 	assert(scene);
+#pragma warning(push)
+#pragma warning(disable : 6011)
 	ProcessNode(scene->mRootNode, scene);
+#pragma warning(pop)
 	assert(PrepareBuffers(device, indexFormat) && "Failed to prepare buffers");
 }
 
@@ -51,7 +54,7 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene)
 			vertex.normal = XMFLOAT3{ mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
 		}
 		else {
-			assert(false);
+			assert(false && "Mesh doesn't have normals, which is not supported");
 		}
 
 		//UV
@@ -68,7 +71,7 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene)
 		{
 			if (i >= 2 && (i - 2) % 3 == 0)
 			{
-				//https://learnopengl.com/Advanced-Lighting/Normal-Mapping
+				// https://learnopengl.com/Advanced-Lighting/Normal-Mapping
 				const XMFLOAT3 pos1 = localMesh.vertices[i - 2].position;
 				const XMFLOAT3 pos2 = localMesh.vertices[i - 1].position;
 				const XMFLOAT3 pos3 = localMesh.vertices[i].position;
@@ -220,7 +223,7 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexF
 
 	// Create index buffer
 	{
-		int indicesByteMultiplier = -1;
+		UINT indicesByteMultiplier = 0;
 		if (indexFormat == DXGI_FORMAT_R32_UINT) {
 			indicesByteMultiplier = 4;
 		}
@@ -233,7 +236,7 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexF
 			return false;
 		}
 
-		const UINT indexBufferSize = mesh.indices.size() * indicesByteMultiplier;
+		const UINT indexBufferSize = static_cast<UINT>(mesh.indices.size()) * indicesByteMultiplier;
 		m_indicesCount = static_cast<UINT>(mesh.indices.size());
 
 		ThrowIfFailed(device->CreateCommittedResource(

@@ -4,30 +4,6 @@ HRESULT DeviceManager::InitializeDeviceResponsibilities(HWND hwnd)
 {
 	HRESULT result = S_OK;
     return result;
-
-    //ComPtr<IDXGIAdapter4> dxgiAdapter4 = GetAdapter(m_useWarp);
-    //m_device = CreateDevice(dxgiAdapter4);
-    //m_commandQueue = CreateCommandQueue(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    //m_swapChain = CreateSwapChain(hwnd, m_commandQueue, m_windowWidth, m_windowHeight, m_frameCount);
-
-    //m_currentBackBufferIndex = m_swapChain->GetCurrentBackBufferIndex();
-    //m_rtvDescriptorHeap = CreateDescriptorHeap(m_device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, m_frameCount);
-    //m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-    //UpdateRenderTargetViews(m_device, m_swapChain, m_rtvDescriptorHeap);
-
-    //for (int i = 0; i < m_frameCount; ++i)
-    //{
-    //    m_commandAllocators[i] = CreateCommandAllocator(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    //}
-    //m_commandList = CreateCommandList(m_device, m_commandAllocators[m_currentBackBufferIndex], D3D12_COMMAND_LIST_TYPE_DIRECT);
-
-    //m_fence = CreateFence(m_device);
-    //m_fenceEvent = CreateEventHandle();
-    //
-    //m_tearingSupported = CheckTearingSupport();
-
-	return result;
 }
 
 HRESULT DeviceManager::CreateWindowResources(HWND hwnd)

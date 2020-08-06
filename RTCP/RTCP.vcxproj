@@ -145,7 +145,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="BufferStructures.h" />
-    <ClInclude Include="CommandQueue.h" />
+    <ClInclude Include="CBuffer.h" />
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="DeviceManager.h" />
     <ClInclude Include="dxc\dxcapi.h" />
@@ -155,10 +155,10 @@
     <ClInclude Include="Main.h" />
     <ClInclude Include="ModelClass.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="RaytracingShadersHelper.h" />
     <ClInclude Include="Renderer.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="CommandQueue.cpp" />
     <ClCompile Include="DeviceManager.cpp" />
     <ClCompile Include="InputManager.cpp" />
     <ClCompile Include="Main.cpp" />
