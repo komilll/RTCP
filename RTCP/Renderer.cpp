@@ -877,8 +877,8 @@ void Renderer::PrepareRaytracingResources()
     textures.push_back({ TextureWithDesc{m_dxrOutput, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
 
     //m_raytracingNormal->CreateRaytracingPipeline<SceneConstantBuffer, CubeConstantBuffer>(m_device.Get(), m_modelBuddha.get(), textures, GetIndexBufferSRVDesc(m_modelBuddha.get()), GetVertexBufferSRVDesc(m_modelBuddha.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer);
-    CBuffer<SceneConstantBuffer> cb{};
-    m_raytracingNormal->CreateRaytracingPipeline(cb);
+    //CBuffer<SceneConstantBuffer> cb{};
+    //m_raytracingNormal->CreateRaytracingPipeline(cb);
     //TestStackOverflow stack = TestStackOverflow();
 
     //CreateBLAS(m_modelBuddha, m_commandList, m_blasScratch, m_blasResult);
