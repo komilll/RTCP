@@ -11,7 +11,7 @@ void ClosestHit(inout RayPayload payload, in Attributes attrib)
 	float3 hitPosition = HitWorldPosition();
 	float3 barycentrics = float3(1.f - attrib.bary.x - attrib.bary.y, attrib.bary.x, attrib.bary.y);
 	
-	uint indexSizeInBytes = 2;
+	uint indexSizeInBytes = 4;
 	uint indicesPerTriangle = 3;
 	uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
 	uint baseIndex = PrimitiveIndex() * triangleIndexStride;
@@ -27,10 +27,10 @@ void ClosestHit(inout RayPayload payload, in Attributes attrib)
 	
 	float3 triangleNormal = vertexNormals[0] * barycentrics.x + vertexNormals[1] * barycentrics.y + vertexNormals[2] * barycentrics.z;
 	
-	float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
-	float4 color = g_sceneCB.lightAmbientColor + diffuseColor;
+	//float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
+	//float4 color = g_sceneCB.lightAmbientColor + diffuseColor;
 	
-	payload.color = float4(1, 0, 1, 1);
+	payload.color = float4(triangleNormal, 1);
 }
 
 #endif // _CLOSEST_HIT_HLSL

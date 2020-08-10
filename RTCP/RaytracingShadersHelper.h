@@ -43,6 +43,8 @@ struct RtProgram
 	D3D12_EXPORT_DESC		exportDesc{};
 	D3D12_STATE_SUBOBJECT	subobject{};
 	std::wstring			exportName{};
+	LPCWSTR					name{};
+	LPCWSTR					exportToRename{};
 
 	RtProgram()
 	{
@@ -80,6 +82,8 @@ struct HitProgram
 	std::wstring exportName;
 	D3D12_HIT_GROUP_DESC desc = {};
 	D3D12_STATE_SUBOBJECT subobject = {};
+	LPCWSTR					name{};
+	LPCWSTR					exportToRename{};
 
 	HitProgram() {}
 	HitProgram(LPCWSTR name) : exportName(name)

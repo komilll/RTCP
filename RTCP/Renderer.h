@@ -9,6 +9,7 @@
 #include "BufferStructures.h"
 #include "CBuffer.h"
 #include "RaytracingShadersHelper.h"
+#include "RaytracingResources.h"
 
 using namespace DirectX;
 typedef std::array<D3D12_INPUT_ELEMENT_DESC, 5> BasicInputLayout;
@@ -50,13 +51,23 @@ private:
 	void CreateViewAndPerspective();
 
 	// Helper functions, creating structures
-	void CreateTextureRTCP(ComPtr<ID3D12Resource>& texture, ComPtr<ID3D12GraphicsCommandList4> commandList, const wchar_t* path, ComPtr<ID3D12Resource>& uploadHeap);
+	void CreateTexture2D(ComPtr<ID3D12Resource>& texture, UINT64 width, UINT height, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT layout = D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES InitialResourceState = D3D12_RESOURCE_STATE_COPY_SOURCE);
+	void CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr<ID3D12GraphicsCommandList4> commandList, const wchar_t* path, ComPtr<ID3D12Resource>& uploadHeap);
+	
 	void CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ComPtr<ID3D12RootSignature>& rootSignature);
 	void CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ID3D12RootSignature*& rootSignature);
+	
 	static void CreateSRV(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc);
 	static void CreateSRV_Texture2D(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels = 1, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING });
 	static void CreateSRV_Texture3D(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels = 1, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE3D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING });
 	static void CreateSRV_TextureCube(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels = 1, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING });
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC GetVertexBufferSRVDesc(ModelClass* model, UINT vertexStructSize);
+	D3D12_SHADER_RESOURCE_VIEW_DESC GetIndexBufferSRVDesc(ModelClass* model);
+	template <class T>
+	D3D12_CONSTANT_BUFFER_VIEW_DESC GetConstantBufferViewDesc(CBuffer<T> cbuffer);
+	D3D12_SHADER_RESOURCE_VIEW_DESC GetAccelerationStructureDesc(ComPtr<ID3D12Resource>& tlasResult);
+	D3D12_UNORDERED_ACCESS_VIEW_DESC GetAccessViewDesc(DXGI_FORMAT Format, D3D12_UAV_DIMENSION ViewDimension);
 
 	// Helper functions, returning default descriptions/structres
 	BasicInputLayout CreateBasicInputLayout();
@@ -64,28 +75,29 @@ private:
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC CreateDefaultPSO(BasicInputLayout inputElementDescs, ComPtr<ID3DBlob> vertexShader, ComPtr<ID3DBlob> pixelShader, D3D12_DEPTH_STENCIL_DESC depthStencilDesc, ComPtr<ID3D12RootSignature> rootSignature);
 
 	// Compiling shaders
-	void InitShaderCompiler(D3D12ShaderCompilerInfo& shaderCompiler);
-	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, D3D12ShaderInfo& info, IDxcBlob** blob);
-	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, RtProgram& program);
+	void InitShaderCompiler(D3D12ShaderCompilerInfo& shaderCompiler) const;
+	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, D3D12ShaderInfo& info, IDxcBlob** blob) const;
+	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, RtProgram& program) const;
 
 #pragma region Raytracing functions
 	// Main function, invoked to prepare DXR pipeline
 	void PrepareRaytracingResources();
+	void PrepareRaytracingResourcesAO();
 
 	// Functions called by PrepareRaytracingResources()
-	void CreateBLAS(std::shared_ptr<ModelClass> model);
-	void CreateTLAS();
+	void CreateBLAS(std::shared_ptr<ModelClass> model, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& blasScratch, ComPtr<ID3D12Resource>& blasResult, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
+	void CreateTLAS(ComPtr<ID3D12Resource> blasResult, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& tlasInstanceDesc, ComPtr<ID3D12Resource>& tlasScratch, ComPtr<ID3D12Resource>& tlasResult, UINT tlasFlags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
 	void CreateDxrPipelineAssets(ModelClass* model);
-	void CreateShaderTable();
-	void CreateRTPSO();
+	void CreateShaderTable(ComPtr<ID3D12Resource>& shaderTable, ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName, uint32_t& shaderTableRecordSize);
+	void CreateRTPSO(ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName);
 
 	// Functions called by PrepareRaytracingResources() - prepare initial buffer values
 	void InitializeRaytracingBufferValues();
 
 	// Functions called by PrepareRaytracingResources() - generating shaders
-	void CreateRayGenShader(D3D12ShaderCompilerInfo& shaderCompiler);
-	void CreateMissShader(D3D12ShaderCompilerInfo& shaderCompiler);
-	void CreateClosestHitShader(D3D12ShaderCompilerInfo& shaderCompiler);
+	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, LPCWSTR name, LPCWSTR nameToExport = L"RayGen");
+	void CreateMissShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"Miss") const;
+	void CreateClosestHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"ClosestHit") const;
 
 #pragma endregion
 
@@ -148,6 +160,7 @@ private:
 	ComPtr<ID3D12Resource> m_depthBuffer = NULL;
 
 	// Constant buffers
+	CBuffer<int> m_testBuffer{};
 	CBuffer<SceneConstantBuffer> m_sceneBuffer;
 	CBuffer<CubeConstantBuffer> m_cubeBuffer;
 	CBuffer<UberBufferStruct> m_uberBuffer;
@@ -163,10 +176,13 @@ private:
 	std::shared_ptr<ModelClass> m_previewModel = NULL;
 	std::shared_ptr<ModelClass> m_modelCube = NULL;
 	std::shared_ptr<ModelClass> m_modelSphere = NULL;
+	std::shared_ptr<ModelClass> m_modelBuddha = NULL;
 #pragma endregion
 	
 #pragma region Raytracing variables
 	// Raytracing - Acceleration structures - BLAS
+	std::shared_ptr<RaytracingResources> m_raytracingNormal = NULL;
+
 	ComPtr<ID3D12Resource> m_blasScratch = NULL;
 	ComPtr<ID3D12Resource> m_blasResult = NULL;
 
@@ -174,9 +190,10 @@ private:
 	ComPtr<ID3D12Resource> m_tlasInstanceDesc = NULL;
 	ComPtr<ID3D12Resource> m_tlasScratch = NULL;
 	ComPtr<ID3D12Resource> m_tlasResult = NULL;
-	UINT64 m_tlasSize;
 
 	// DXR - output texture and descriptor heap of resources
+	ComPtr<ID3D12Resource> m_rtNormalTexture = NULL;
+	ComPtr<ID3D12DescriptorHeap> m_rtNormalHeap = NULL;
 	ComPtr<ID3D12Resource> m_dxrOutput = NULL;
 	ComPtr<ID3D12DescriptorHeap> m_dxrDescriptorHeap = NULL;
 

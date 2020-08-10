@@ -1,8 +1,9 @@
-// ---[ Structures ]---
-
 #ifndef _COMMON_HLSL
 #define _COMMON_HLSL
 
+#include "RT_HelperFunctions.hlsl"
+
+// Structures
 struct Vertex
 {
 	float3 position;
@@ -21,9 +22,9 @@ struct Attributes
 {
 	float2 bary;
 };
+////
 
-// ---[ Constant Buffers ]---
-
+// Constant Buffers
 struct SceneConstantBuffer
 {
 	matrix projectionToWorld;
@@ -31,17 +32,15 @@ struct SceneConstantBuffer
 	float4 lightPosition;
 	float4 lightAmbientColor;
 	float4 lightDiffuseColor;
-	
-	//float padding[32];
 };
-
+////
 struct CubeConstantBuffer
 {
-	float4 albedo;
+	float3 albedo;
+	int frameCount;
 };
 
-// ---[ Resources ]---
-
+// Resources
 ConstantBuffer<SceneConstantBuffer> g_sceneCB : register(b0);
 ConstantBuffer<CubeConstantBuffer> g_cubeCB : register(b1);
 
@@ -50,15 +49,7 @@ RWTexture2D<float4> RTOutput				  : register(u0);
 RaytracingAccelerationStructure SceneBVH      : register(t0);
 ByteAddressBuffer indices					  : register(t1);
 StructuredBuffer<Vertex> vertices			  : register(t2);
-
-// ---[ Helper Functions ]---
-
-//uint3 GetIndices(uint triangleIndex)
-//{
-//	uint baseIndex = (triangleIndex * 3);
-//	int address = (baseIndex * 4);
-//	return indices.Load3(address);
-//}
+////
 
 // Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
 float3 HitAttribute(float3 vertexAttribute[3], Attributes attrib)
@@ -68,30 +59,15 @@ float3 HitAttribute(float3 vertexAttribute[3], Attributes attrib)
         attrib.bary.y * (vertexAttribute[2] - vertexAttribute[0]);
 }
 
-// Diffuse lighting calculation.
-float4 CalculateDiffuseLighting(float3 hitPosition, float3 normal)
-{
-	float3 pixelToLight = normalize(g_sceneCB.lightPosition.xyz - hitPosition);
-
-    // Diffuse contribution.
-	float fNDotL = max(0.0f, dot(pixelToLight, normal));
-
-	return g_cubeCB.albedo * g_sceneCB.lightDiffuseColor * fNDotL;
-}
-
-
 uint3 Load3x32BitIndices(uint offsetBytes)
 {
-	// Load first 2 indices
 	return indices.Load3(offsetBytes);
 }
-
 
 // Load three 16 bit indices from a byte addressed buffer.
 uint3 Load3x16BitIndices(uint offsetBytes)
 {
 	uint3 indices_;
-
     // ByteAdressBuffer loads must be aligned at a 4 byte boundary.
     // Since we need to read three 16 bit indices: { 0, 1, 2 } 
     // aligned at a 4 byte boundary as: { 0 1 } { 2 0 } { 1 2 } { 0 1 } ...
@@ -134,20 +110,13 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 	world.xyz /= world.w;
 	origin = g_sceneCB.cameraPosition.xyz;
 	direction = normalize(world.xyz - origin);
-	
-	//float2 currenPixelLocation = index + float2(0.5f, 0.5f);
-	//float2 pixelCenter = currenPixelLocation / dispatchRaysDimensions.xy;
-	//float2 ndc = float2(2, -2) * pixelCenter + float2(-1, 1);
-	//origin = g_sceneCB.cameraPosition.xyz;
-	//direction = normalize(ndc.x * g_sceneCB.cameraPosition.x +
- //                              ndc.y * g_sceneCB.cameraPosition.y +
- //                                      g_sceneCB.cameraPosition.z);
 }
 
 // Get hit position in world-space
-float3 HitWorldPosition()
+inline float3 HitWorldPosition()
 {
 	return WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 }
+
 
 #endif // _COMMON_HLSL

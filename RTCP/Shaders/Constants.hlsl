@@ -1,0 +1,9 @@
+#ifndef _CONSTANSTS_HLSL
+#define _CONSTANSTS_HLSL
+
+const static float PI = 3.14159265358979323846;
+const static float INV_PI = 0.31830988618379067154;
+const static float INV_2PI = 0.15915494309189533577;
+const static float INV_4PI = 0.07957747154594766788;
+
+#endif //_CONSTANSTS_HLSL

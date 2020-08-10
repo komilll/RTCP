@@ -36,7 +36,8 @@ typedef struct _sceneConstantBuffer
 
 typedef struct _cubeConstantBuffer
 {
-	XMFLOAT4 albedo = XMFLOAT4{ 1, 0, 0, 1 };
+	XMFLOAT3 albedo = XMFLOAT3{ 1, 0, 0 };
+	int frameCount;
 } CubeConstantBuffer;
 
 #endif // !_BUFFER_STRUCTURES_H_

@@ -16,6 +16,12 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{e219b332-12af-47ae-ab98-03ea8ed264ac}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\Raytracing">
+      <UniqueIdentifier>{bba74030-59b5-4523-ba45-d44206f893c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Helper">
+      <UniqueIdentifier>{8f74cd81-7443-465f-821a-2e649e00da87}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Main.h">
@@ -57,6 +63,12 @@
     <ClInclude Include="RaytracingShadersHelper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="RaytracingResources.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="TestStackOverflow.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -77,34 +89,52 @@
     <ClCompile Include="InputManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="RaytracingResources.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="Shaders\vertexShader.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\pixelShader.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\VS_Skybox.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\PS_Skybox.hlsl">
-      <Filter>Resource Files</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\ALL_UberBuffer.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Miss.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RayGen.hlsl">
-      <Filter>Resource Files</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\ClosestHit.hlsl">
-      <Filter>Resource Files</Filter>
+      <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\Common.hlsl">
-      <Filter>Resource Files</Filter>
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Miss.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\pixelShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PS_Skybox.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RayGen.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\vertexShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Constants.hlsl">
+      <Filter>Shaders\Helper</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\UniformDistribution.hlsl">
+      <Filter>Shaders\Helper</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RT_Normal.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RT_AO.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RT_HelperFunctions.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
