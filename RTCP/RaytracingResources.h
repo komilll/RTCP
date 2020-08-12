@@ -8,20 +8,42 @@
 #include "CBuffer.h"
 #include "BufferStructures.h"
 
-typedef std::pair<ComPtr<ID3D12Resource>&, D3D12_UNORDERED_ACCESS_VIEW_DESC> TextureWithDesc;
+struct TextureWithDesc
+{
+public:
+	TextureWithDesc(ComPtr<ID3D12Resource>& resource_, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc_)
+	{
+		resource = resource_;
+		isSRV = true;
+		srvDesc = srvDesc_;
+	};
+
+	TextureWithDesc(ComPtr<ID3D12Resource>& resource_, D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc_)
+	{
+		resource = resource_;
+		isSRV = false;
+		uavDesc = uavDesc_;
+	};
+
+	ComPtr<ID3D12Resource> resource;
+	bool isSRV;
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+};
+
+typedef std::pair<ComPtr<ID3D12Resource>, std::size_t> ResourceWithSize;
 
 class RaytracingResources
 {
 public:
-	RaytracingResources() = default;
 	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, LPCWSTR rayGenName, LPCWSTR missName, LPCWSTR hitName, LPCWSTR hitGroupName, LPCWSTR rayGenNameExport = L"RayGen", LPCWSTR missNameExport = L"Miss", LPCWSTR hitNameExport = L"Hit");
 	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName);
 
-	//template <typename T1, typename T2>
-	//void CreateRaytracingPipeline(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1> cb1, CBuffer<T2> cb2);
-
-	template <typename T>
-	void CreateRaytracingPipeline(CBuffer<T> cb);
+    void CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector< ResourceWithSize> buffersWithSize);
+	ComPtr<ID3D12DescriptorHeap> GetDescriptorHeap() const { return m_descriptorHeap; };
+	ComPtr<ID3D12Resource> GetShaderTable() const { return m_shaderTable; };
+	uint32_t GetShaderTableRecordSize() const { return m_shaderTableRecordSize; };
+	ComPtr<ID3D12StateObject> GetRTPSO() const { return m_rtpso; };
 
 private:
 	// Called in constructor
@@ -29,10 +51,9 @@ private:
 	void CreateTLAS(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, UINT tlasFlags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
 
 	// Called through CreateRaytracingPipeline
+	void CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector< ResourceWithSize> buffersWithSize);
 	void CreateShaderTable(ID3D12Device5* device);
 	void CreateRTPSO(ID3D12Device5* device);
-	template <class T1, class T2>
-	void CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, T1 cb1, T2 cb2);
 
 public:
 	RtProgram m_rayGenShader;
@@ -57,8 +78,48 @@ private:
 };
 #endif // !_RAYTRACING_RESOURCES_H_
 
-template<typename T>
-inline void CreateRaytracingPipeline(CBuffer<T> cb)
+template<typename T1, typename T2, typename T3>
+inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3)
 {
+	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, cb3);
+}
 
+template<typename T1, typename T2>
+inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2)
+{
+	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2);
+}
+
+template <typename T1, typename T2>
+inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2)
+{
+    // Create view buffer and material buffer
+    {
+        CreateUploadHeapRTCP(device, cb1);
+        CreateUploadHeapRTCP(device, cb2);
+    }
+
+	std::vector<ResourceWithSize> v{};
+	v.push_back({ cb1.resource, sizeof(cb1.value) });
+	v.push_back({ cb2.resource, sizeof(cb2.value) });
+
+	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v);
+}
+
+template <typename T1, typename T2, typename T3>
+inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3)
+{
+	// Create view buffer and material buffer
+	{
+		CreateUploadHeapRTCP(device, cb1);
+		CreateUploadHeapRTCP(device, cb2);
+		CreateUploadHeapRTCP(device, cb3);
+	}
+
+	std::vector<ResourceWithSize> v{};
+	v.push_back({ cb1.resource, sizeof(cb1.value) });
+	v.push_back({ cb2.resource, sizeof(cb2.value) });
+	v.push_back({ cb3.resource, sizeof(cb3.value) });
+
+	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v);
 }

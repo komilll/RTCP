@@ -23,6 +23,25 @@ float3 UniformSampleSphere(float u1, float u2)
 	return float3(x, y, z);
 }
 
+float3 UniformSampleHemisphere(float u1, float u2)
+{
+	const float r = sqrt(1.0f - u1 * u1);
+	const float phi = 2 * PI * u2;
+ 
+	return float3(cos(phi) * r, sin(phi) * r, u1);
+}
+
+float3 CosineSampleHemisphere(float u1, float u2)
+{
+	const float r = sqrt(u1);
+	const float theta = 2 * PI * u2;
+ 
+	const float x = r * cos(theta);
+	const float y = r * sin(theta);
+ 
+	return float3(x, y, sqrt(max(0.0f, 1 - u1)));
+}
+
 float2 HammersleyDistribution(uint i, uint N, uint2 random)
 {
     // Transform to 0-1 interval (2.3283064365386963e-10 == 1.0 / 2^32)

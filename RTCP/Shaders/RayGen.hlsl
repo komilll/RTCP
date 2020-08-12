@@ -22,7 +22,7 @@ void RayGen()
 	float2 Xi = HammersleyDistribution(g_cubeCB.frameCount, 8, seed);
 	float3 L = UniformSampleSphere(Xi.x, Xi.y);
 	
-	RTOutput[DispatchRaysIndex().xy] = payload.color;
+	//RTOutput[DispatchRaysIndex().xy] = payload.color;
 }
 
 #endif //_RAYGEN_HLSL

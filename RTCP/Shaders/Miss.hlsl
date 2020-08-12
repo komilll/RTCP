@@ -8,7 +8,9 @@
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-    payload.color = float4(0.0f, 0.2f, 0.4f, 1.0f);
+    //payload.color = float4(0.0f, 0.2f, 0.4f, 1.0f);
+	RTOutputPosition[DispatchRaysIndex().xy] = float4(0.0f, 0.2f, 0.4f, 0.0f);
+	RTOutputNormal[DispatchRaysIndex().xy] = float4(0.0f, 0.2f, 0.4f, 0.0f);
 }
 
 #endif // _MISS_HLSL

@@ -158,7 +158,6 @@
     <ClInclude Include="RaytracingResources.h" />
     <ClInclude Include="RaytracingShadersHelper.h" />
     <ClInclude Include="Renderer.h" />
-    <ClInclude Include="TestStackOverflow.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DeviceManager.cpp" />

@@ -66,9 +66,6 @@
     <ClInclude Include="RaytracingResources.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="TestStackOverflow.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">

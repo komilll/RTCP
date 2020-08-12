@@ -84,20 +84,21 @@ private:
 	void PrepareRaytracingResources();
 	void PrepareRaytracingResourcesAO();
 
-	// Functions called by PrepareRaytracingResources()
-	void CreateBLAS(std::shared_ptr<ModelClass> model, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& blasScratch, ComPtr<ID3D12Resource>& blasResult, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
-	void CreateTLAS(ComPtr<ID3D12Resource> blasResult, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& tlasInstanceDesc, ComPtr<ID3D12Resource>& tlasScratch, ComPtr<ID3D12Resource>& tlasResult, UINT tlasFlags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
-	void CreateDxrPipelineAssets(ModelClass* model);
-	void CreateShaderTable(ComPtr<ID3D12Resource>& shaderTable, ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName, uint32_t& shaderTableRecordSize);
-	void CreateRTPSO(ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName);
+	//// Functions called by PrepareRaytracingResources()
+	//void CreateBLAS(std::shared_ptr<ModelClass> model, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& blasScratch, ComPtr<ID3D12Resource>& blasResult, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
+	//void CreateTLAS(ComPtr<ID3D12Resource> blasResult, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& tlasInstanceDesc, ComPtr<ID3D12Resource>& tlasScratch, ComPtr<ID3D12Resource>& tlasResult, UINT tlasFlags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
+	//void CreateDxrPipelineAssets(ModelClass* model);
+	//void CreateShaderTable(ComPtr<ID3D12Resource>& shaderTable, ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName, uint32_t& shaderTableRecordSize);
+	//void CreateRTPSO(ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName);
 
 	// Functions called by PrepareRaytracingResources() - prepare initial buffer values
 	void InitializeRaytracingBufferValues();
 
 	// Functions called by PrepareRaytracingResources() - generating shaders
-	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, LPCWSTR name, LPCWSTR nameToExport = L"RayGen");
+	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = L"RayGen");
 	void CreateMissShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"Miss") const;
 	void CreateClosestHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"ClosestHit") const;
+	void CreateAnyHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"AnyHit") const;
 
 #pragma endregion
 
@@ -112,7 +113,7 @@ private:
 
 	// DEBUG PROPERTIES
 	bool FREEZE_CAMERA = false;
-	bool DO_RAYTRACING = false;
+	bool DO_RAYTRACING = true;
 
 	// Camera settings
 	XMFLOAT3 m_cameraPosition{ 0,0,0 };
@@ -160,9 +161,9 @@ private:
 	ComPtr<ID3D12Resource> m_depthBuffer = NULL;
 
 	// Constant buffers
-	CBuffer<int> m_testBuffer{};
 	CBuffer<SceneConstantBuffer> m_sceneBuffer;
 	CBuffer<CubeConstantBuffer> m_cubeBuffer;
+	CBuffer<AoConstantBuffer> m_aoBuffer;
 	CBuffer<UberBufferStruct> m_uberBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBufferSkybox;
@@ -173,7 +174,6 @@ private:
 	ComPtr<ID3D12Resource> m_skyboxTexture;
 
 	// Models
-	std::shared_ptr<ModelClass> m_previewModel = NULL;
 	std::shared_ptr<ModelClass> m_modelCube = NULL;
 	std::shared_ptr<ModelClass> m_modelSphere = NULL;
 	std::shared_ptr<ModelClass> m_modelBuddha = NULL;
@@ -182,34 +182,15 @@ private:
 #pragma region Raytracing variables
 	// Raytracing - Acceleration structures - BLAS
 	std::shared_ptr<RaytracingResources> m_raytracingNormal = NULL;
-
-	ComPtr<ID3D12Resource> m_blasScratch = NULL;
-	ComPtr<ID3D12Resource> m_blasResult = NULL;
-
-	// Raytracing - Acceleration structures - TLAS
-	ComPtr<ID3D12Resource> m_tlasInstanceDesc = NULL;
-	ComPtr<ID3D12Resource> m_tlasScratch = NULL;
-	ComPtr<ID3D12Resource> m_tlasResult = NULL;
+	std::shared_ptr<RaytracingResources> m_raytracingAO = NULL;
 
 	// DXR - output texture and descriptor heap of resources
+	ComPtr<ID3D12Resource> m_rtPositionTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtNormalTexture = NULL;
-	ComPtr<ID3D12DescriptorHeap> m_rtNormalHeap = NULL;
-	ComPtr<ID3D12Resource> m_dxrOutput = NULL;
-	ComPtr<ID3D12DescriptorHeap> m_dxrDescriptorHeap = NULL;
+	ComPtr<ID3D12Resource> m_rtAoTexture = NULL;
 
 	// Shader compiler
 	D3D12ShaderCompilerInfo m_shaderCompiler{};
-
-	// RT shaders, RT shader table
-	RtProgram m_rayGenShader;
-	RtProgram m_missShader;
-	HitProgram m_hitShader;
-	uint32_t m_shaderTableRecordSize;
-	ComPtr<ID3D12Resource> m_shaderTable;
-
-	// RTPSO
-	ComPtr<ID3D12StateObject> m_rtpso = NULL;
-	ComPtr<ID3D12StateObjectProperties> m_rtpsoInfo = NULL;
 #pragma endregion
 
 	// Synchronization

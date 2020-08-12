@@ -8,6 +8,12 @@ template <class T>
 struct CBuffer
 {
 public:
+	void Update() {
+		if (ptr != nullptr) {
+			memcpy(ptr, &value, sizeof(value));
+		}
+	}
+
 	T value;
 	UINT8* ptr = nullptr;
 	ComPtr<ID3D12Resource> resource = NULL;

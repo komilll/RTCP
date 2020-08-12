@@ -44,7 +44,8 @@ struct CubeConstantBuffer
 ConstantBuffer<SceneConstantBuffer> g_sceneCB : register(b0);
 ConstantBuffer<CubeConstantBuffer> g_cubeCB : register(b1);
 
-RWTexture2D<float4> RTOutput				  : register(u0);
+RWTexture2D<float4> RTOutputNormal				  : register(u0);
+RWTexture2D<float4> RTOutputPosition			  : register(u1);
 
 RaytracingAccelerationStructure SceneBVH      : register(t0);
 ByteAddressBuffer indices					  : register(t1);

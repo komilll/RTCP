@@ -40,4 +40,12 @@ typedef struct _cubeConstantBuffer
 	int frameCount;
 } CubeConstantBuffer;
 
+
+typedef struct _aoConstantBuffer
+{
+	float aoRadius;
+	float minT;
+	XMFLOAT2 padding;
+} AoConstantBuffer;
+
 #endif // !_BUFFER_STRUCTURES_H_

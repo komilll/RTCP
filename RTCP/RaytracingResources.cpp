@@ -25,6 +25,13 @@ RaytracingResources::RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12Gra
     CreateTLAS(device, commandList);
 }
 
+void RaytracingResources::CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize)
+{
+    CreateDxrPipelineAssets(device, model, texturesWithDesc, indexDesc, vertexDesc, buffersWithSize);
+    CreateRTPSO(device);
+    CreateShaderTable(device);
+}
+
 void RaytracingResources::CreateBLAS(std::shared_ptr<ModelClass> model, ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags)
 {
     // Describe the geometry that goes in the bottom acceleration structure(s)
@@ -167,22 +174,15 @@ void RaytracingResources::CreateTLAS(ID3D12Device5* device, ComPtr<ID3D12Graphic
     commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_tlasResult.Get()));
 }
 
-template<class T1, class T2>
-inline void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, T1 cb1, T2 cb2)
+void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize)
 {
-    // Create view buffer and material buffer
-    {
-        CreateUploadHeapRTCP(device, cb1);
-        CreateUploadHeapRTCP(device, cb2);
-    }
-
     // Create descriptor heaps
     {
         D3D12_DESCRIPTOR_HEAP_DESC desc = {};
         // Vertex + index + TLAS = 3
-        // cb1 + cb2 = 2
-        // Number of textures = x
-        desc.NumDescriptors = 3 + 2 + texturesWithDesc.size();
+        // Buffer count = y // buffersWithSize
+        // Number of textures = x // texturesWithDesc
+        desc.NumDescriptors = 3 + static_cast<UINT>(buffersWithSize.size()) + static_cast<UINT>(texturesWithDesc.size());
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
@@ -193,24 +193,30 @@ inline void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, 
         D3D12_CPU_DESCRIPTOR_HANDLE handle = m_descriptorHeap->GetCPUDescriptorHandleForHeapStart();
         UINT handleIncrement = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-        // Create the cb1 CBV
+        // Create the CBV
+        if (buffersWithSize.size() > 0)
         {
-            D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { cb1.resource->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(cb1.value)) };
+            // First element
+            D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[0].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(buffersWithSize[0].second)) };
             device->CreateConstantBufferView(&cbvDesc, handle);
-        }
 
-        // Create the cb2 CBV
-        handle.ptr += handleIncrement;
-        {
-            D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { cb2.resource->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(cb2.value)) };
-            device->CreateConstantBufferView(&cbvDesc, handle);
+            // Next elements
+            for (int i = 1; i < buffersWithSize.size(); ++i)
+            {
+                handle.ptr += handleIncrement;
+                D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[i].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(buffersWithSize[i].second)) };
+                device->CreateConstantBufferView(&cbvDesc, handle);
+            }
         }
 
         // Create the DXR output buffer UAV
         for (auto& tex : texturesWithDesc)
         {
-            handle.ptr += handleIncrement;
-            device->CreateUnorderedAccessView(tex.first.Get(), nullptr, &tex.second, handle);
+            if (!tex.isSRV)
+            {
+                handle.ptr += handleIncrement;
+                device->CreateUnorderedAccessView(tex.resource.Get(), nullptr, &tex.uavDesc, handle);
+            }
         }
 
         // Create the DXR Top Level Acceleration Structure SRV
@@ -224,11 +230,21 @@ inline void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, 
 
         // Create the index buffer SRV
         handle.ptr += handleIncrement;
-        device->CreateShaderResourceView(model->GetIndexBuffer().Get(), indexDesc, handle);
+        device->CreateShaderResourceView(model->GetIndexBuffer().Get(), &indexDesc, handle);
 
         // Create the vertex buffer SRV
         handle.ptr += handleIncrement;
-        device->CreateShaderResourceView(model->GetVertexBuffer().Get(), vertexDesc, handle);
+        device->CreateShaderResourceView(model->GetVertexBuffer().Get(), &vertexDesc, handle);
+
+        // Create texture buffer SRV
+        for (auto& tex : texturesWithDesc)
+        {
+            if (tex.isSRV)
+            {
+                handle.ptr += handleIncrement;
+                device->CreateShaderResourceView(tex.resource.Get(), &tex.srvDesc, handle);
+            }
+        }
     }
 }
 
@@ -294,10 +310,11 @@ The entry size must be aligned up to D3D12_RAYTRACING_SHADER_BINDING_TABLE_RECOR
 
 void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
 {
-    // Need 10 subobjects:
+    // Need 11 subobjects:
     // 1 for RGS program
     // 1 for Miss program
     // 1 for CHS program
+    // 1 for AHS program
     // 1 for Hit Group
     // 2 for RayGen Root Signature (root-signature and association)
     // 2 for Shader Config (config and association)
@@ -305,7 +322,7 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
     // 1 for Pipeline Config	
         UINT index = 0;
     std::vector<D3D12_STATE_SUBOBJECT> subobjects;
-    subobjects.resize(10);
+    subobjects.resize(m_hitShader.ahs.name != nullptr ? 11 : 10);
 
     // Add state subobject for the RGS
     D3D12_EXPORT_DESC rgsExportDesc = {};
@@ -345,8 +362,8 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
 
     // Add state subobject for the Closest Hit shader
     D3D12_EXPORT_DESC chsExportDesc = {};
-    chsExportDesc.Name = m_hitShader.name; //L"ClosestHit_76";
-    chsExportDesc.ExportToRename = m_hitShader.exportToRename; //L"ClosestHit";
+    chsExportDesc.Name = m_hitShader.chs.name; //L"ClosestHit_76";
+    chsExportDesc.ExportToRename = m_hitShader.chs.exportToRename; //L"ClosestHit";
     chsExportDesc.Flags = D3D12_EXPORT_FLAG_NONE;
 
     D3D12_DXIL_LIBRARY_DESC	chsLibDesc = {};
@@ -361,9 +378,30 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
 
     subobjects[index++] = chs;
 
+    if (m_hitShader.ahs.name != nullptr)
+    {
+        // Add state subobject for the Any Hit shader
+        D3D12_EXPORT_DESC ahsExportDesc = {};
+        ahsExportDesc.Name = m_hitShader.ahs.name; //L"AnytHit_34";
+        ahsExportDesc.ExportToRename = m_hitShader.ahs.exportToRename; //L"AnyHit";
+        ahsExportDesc.Flags = D3D12_EXPORT_FLAG_NONE;
+
+        D3D12_DXIL_LIBRARY_DESC	ahsLibDesc = {};
+        ahsLibDesc.DXILLibrary.BytecodeLength = m_hitShader.ahs.blob->GetBufferSize();
+        ahsLibDesc.DXILLibrary.pShaderBytecode = m_hitShader.ahs.blob->GetBufferPointer();
+        ahsLibDesc.NumExports = 1;
+        ahsLibDesc.pExports = &ahsExportDesc;
+
+        D3D12_STATE_SUBOBJECT ahs = {};
+        ahs.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY;
+        ahs.pDesc = &ahsLibDesc;
+
+        subobjects[index++] = ahs;
+    }
+
     // Add a state subobject for the hit group
     D3D12_HIT_GROUP_DESC hitGroupDesc = {};
-    hitGroupDesc.ClosestHitShaderImport = m_hitShader.name; // L"ClosestHit_76";
+    hitGroupDesc.ClosestHitShaderImport = m_hitShader.chs.name; // L"ClosestHit_76";
     hitGroupDesc.HitGroupExport = m_hitGroupName; // L"HitGroup";
 
     D3D12_STATE_SUBOBJECT hitGroup = {};
@@ -385,13 +423,23 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
 
     // Create a list of the shader export names that use the payload
     //const WCHAR* shaderExports[] = { L"RayGen_12", L"Miss_5", L"HitGroup" };
-    const WCHAR* shaderExports[] = { m_rayGenShader.name, m_missShader.name, m_hitGroupName };
-
-    // Add a state subobject for the association between shaders and the payload
     D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION shaderPayloadAssociation = {};
-    shaderPayloadAssociation.NumExports = _countof(shaderExports);
-    shaderPayloadAssociation.pExports = shaderExports;
-    shaderPayloadAssociation.pSubobjectToAssociate = &subobjects[(index - 1)];
+    if (m_hitShader.ahs.name != nullptr)
+    {
+        const WCHAR* shaderExports[] = { m_rayGenShader.name, m_missShader.name, m_hitShader.chs.name, m_hitShader.ahs.name };
+        // Add a state subobject for the association between shaders and the payload
+        shaderPayloadAssociation.NumExports = _countof(shaderExports);
+        shaderPayloadAssociation.pExports = shaderExports;
+        shaderPayloadAssociation.pSubobjectToAssociate = &subobjects[(index - 1)];
+    }
+    else
+    {
+        const WCHAR* shaderExports[] = { m_rayGenShader.name, m_missShader.name, m_hitShader.chs.name };
+        // Add a state subobject for the association between shaders and the payload
+        shaderPayloadAssociation.NumExports = _countof(shaderExports);
+        shaderPayloadAssociation.pExports = shaderExports;
+        shaderPayloadAssociation.pSubobjectToAssociate = &subobjects[(index - 1)];
+    }
 
     D3D12_STATE_SUBOBJECT shaderPayloadAssociationObject = {};
     shaderPayloadAssociationObject.Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
@@ -408,13 +456,23 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
 
     // Create a list of the shader export names that use the root signature
     //const WCHAR* rootSigExports[] = { L"RayGen_12", L"HitGroup", L"Miss_5" };
-    const WCHAR* rootSigExports[] = { m_rayGenShader.name, m_hitGroupName, m_missShader.name };
-
-    // Add a state subobject for the association between the RayGen shader and the local root signature
     D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION rayGenShaderRootSigAssociation = {};
-    rayGenShaderRootSigAssociation.NumExports = _countof(rootSigExports);
-    rayGenShaderRootSigAssociation.pExports = rootSigExports;
-    rayGenShaderRootSigAssociation.pSubobjectToAssociate = &subobjects[(index - 1)];
+    if (m_hitShader.ahs.name != nullptr)
+    {
+        const WCHAR* rootSigExports[] = { m_rayGenShader.name, m_missShader.name, m_hitShader.chs.name, m_hitShader.ahs.name };
+        // Add a state subobject for the association between the RayGen shader and the local root signature
+        rayGenShaderRootSigAssociation.NumExports = _countof(rootSigExports);
+        rayGenShaderRootSigAssociation.pExports = rootSigExports;
+        rayGenShaderRootSigAssociation.pSubobjectToAssociate = &subobjects[(index - 1)];
+    }
+    else
+    {
+        const WCHAR* rootSigExports[] = { m_rayGenShader.name, m_missShader.name, m_hitShader.chs.name };
+        // Add a state subobject for the association between the RayGen shader and the local root signature
+        rayGenShaderRootSigAssociation.NumExports = _countof(rootSigExports);
+        rayGenShaderRootSigAssociation.pExports = rootSigExports;
+        rayGenShaderRootSigAssociation.pSubobjectToAssociate = &subobjects[(index - 1)];
+    }
 
     D3D12_STATE_SUBOBJECT rayGenShaderRootSigAssociationObject = {};
     rayGenShaderRootSigAssociationObject.Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
