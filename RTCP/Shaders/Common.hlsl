@@ -15,7 +15,8 @@ struct Vertex
 
 struct RayPayload
 {
-	float4 color;
+	float4 worldPos;
+	float4 normalWithDepth;
 };
 
 struct Attributes 

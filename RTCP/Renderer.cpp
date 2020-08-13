@@ -80,7 +80,7 @@ void Renderer::OnUpdate()
     }
     // Update ao cbuffer - ao CB
     {
-        m_aoBuffer.value.aoRadius = 25.0f;
+        m_aoBuffer.value.aoRadius = 1.0f;
         m_aoBuffer.value.minT = 1e-4f;
         m_aoBuffer.value.padding = {};
         m_aoBuffer.Update();
@@ -889,13 +889,15 @@ void Renderer::CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr
 
 void Renderer::PrepareRaytracingResources()
 {
+    const std::shared_ptr<ModelClass> model = m_modelBuddha;
+
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
 
     CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RayGen.hlsl", 2, 2, 3, {}, L"RayGen_12");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/Miss.hlsl", L"Miss_5");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/ClosestHit.hlsl", L"ClosestHit_76");
-    m_raytracingNormal = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, m_modelBuddha, rayGenShader, missShader, hitShader, L"HitGroup"));
+    m_raytracingNormal = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"HitGroup"));
 
     std::vector<TextureWithDesc> textures{};
     CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -903,11 +905,13 @@ void Renderer::PrepareRaytracingResources()
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
     textures.push_back({ TextureWithDesc{m_rtPositionTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
 
-    CreateRaytracingPipeline(m_raytracingNormal.get(), m_device.Get(), m_modelBuddha.get(), textures, GetIndexBufferSRVDesc(m_modelBuddha.get()), GetVertexBufferSRVDesc(m_modelBuddha.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer);
+    CreateRaytracingPipeline(m_raytracingNormal.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, sizeof(XMFLOAT4) * 2);
 }
 
 void Renderer::PrepareRaytracingResourcesAO()
 {
+    const std::shared_ptr<ModelClass> model = m_modelBuddha;
+
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
     std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
@@ -917,7 +921,7 @@ void Renderer::PrepareRaytracingResourcesAO()
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"Miss_AO");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"ClosestHit_AO");
     //CreateAnyHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"AnyHit_AO");
-    m_raytracingAO = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, m_modelBuddha, rayGenShader, missShader, hitShader, L"GroupAO"));
+    m_raytracingAO = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"GroupAO"));
 
     std::vector<TextureWithDesc> textures{};
     CreateTexture2D(m_rtAoTexture, m_windowWidth, m_windowHeight);
@@ -928,7 +932,7 @@ void Renderer::PrepareRaytracingResourcesAO()
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, srvDesc } });
     textures.push_back({ TextureWithDesc{m_rtPositionTexture, srvDesc } });
 
-    CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), m_modelBuddha.get(), textures, GetIndexBufferSRVDesc(m_modelBuddha.get()), GetVertexBufferSRVDesc(m_modelBuddha.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, m_aoBuffer);
+    CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, m_aoBuffer);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)

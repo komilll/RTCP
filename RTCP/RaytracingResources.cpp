@@ -25,10 +25,10 @@ RaytracingResources::RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12Gra
     CreateTLAS(device, commandList);
 }
 
-void RaytracingResources::CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize)
+void RaytracingResources::CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize, size_t maxPayloadSize)
 {
     CreateDxrPipelineAssets(device, model, texturesWithDesc, indexDesc, vertexDesc, buffersWithSize);
-    CreateRTPSO(device);
+    CreateRTPSO(device, maxPayloadSize);
     CreateShaderTable(device);
 }
 
@@ -308,7 +308,7 @@ The entry size must be aligned up to D3D12_RAYTRACING_SHADER_BINDING_TABLE_RECOR
     m_shaderTable->Unmap(0, nullptr);
 }
 
-void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
+void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSize)
 {
     // Need 11 subobjects:
     // 1 for RGS program
@@ -412,7 +412,7 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device)
 
     // Add a state subobject for the shader payload configuration
     D3D12_RAYTRACING_SHADER_CONFIG shaderDesc = {};
-    shaderDesc.MaxPayloadSizeInBytes = sizeof(XMFLOAT4);	// RGB and HitT
+    shaderDesc.MaxPayloadSizeInBytes = static_cast<UINT>(maxPayloadSize);
     shaderDesc.MaxAttributeSizeInBytes = D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES;
 
     D3D12_STATE_SUBOBJECT shaderConfigObject = {};

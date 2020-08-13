@@ -58,8 +58,8 @@ RWTexture2D<float4> RTOutput : register(u0);
 RaytracingAccelerationStructure SceneBVH : register(t0);
 ByteAddressBuffer indices : register(t1);
 StructuredBuffer<Vertex> vertices : register(t2);
-Texture2D NormalTextureInput : register(t3);
-Texture2D PositionTextureInput : register(t4);
+Texture2D<float4> NormalTextureInput : register(t3);
+Texture2D<float4> PositionTextureInput : register(t4);
 
 SamplerState g_sampler : register(s0);
 ////
@@ -78,20 +78,6 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 	world.xyz /= world.w;
 	origin = g_sceneCB.cameraPosition.xyz;
 	direction = normalize(world.xyz - origin);
-}
-
-float shootAmbientOcclusionRay(float3 origin, float3 dir, float minT, float maxT)
-{
-	//RayPayload rayPayload = { 0.0f };
-	//RayDesc rayAO = { origin, minT, dir, maxT };
-
- // // We're going to tell our ray to never run the closest-hit shader and to
- // //     stop as soon as we find *any* intersection
-	//uint rayFlags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH |
- //                 RAY_FLAG_SKIP_CLOSEST_HIT_SHADER;
-
-	//TraceRay(SceneBVH, rayFlags, 0xFF, 0, 1, 0, rayAO, rayPayload);
-	//return rayPayload.aoVal;
 }
 
 // NVIDIA function - https://github.com/NVIDIAGameWorks/GettingStartedWithRTXRayTracing/blob/master/11-OneShadowRayPerPixel/Data/Tutorial11/diffusePlus1ShadowUtils.hlsli
@@ -142,18 +128,6 @@ float3 getCosHemisphereSample(inout uint randSeed, float3 hitNorm)
 	return tangent * (r * cos(phi).x) + bitangent * (r * sin(phi)) + hitNorm.xyz * sqrt(1 - randVal.x);
 }
 
-static float3 aoSamples[8] =
-{
-	float3(-0.573172f, -0.532465f, 0.62286f),
-	float3(0.587828f, 0.380267f, 0.714042f),
-	float3(-0.857373f, -0.448367f, 0.252742f),
-	float3(0.322927f, -0.208062f, 0.92327f),
-	float3(-0.770474f, 0.378665f, 0.512818f),
-	float3(0.367633f, -0.868896f, 0.33146f),
-	float3(-0.073854f, 0.628146f, 0.774583f),
-	float3(-0.383834f, -0.922466f, 0.0415685f),
-};
-
 [shader("raygeneration")]
 void RayGen()
 {
@@ -164,11 +138,13 @@ void RayGen()
 	float3 primaryRayOrigin, primaryRayDirection; 
 	GenerateCameraRay(LaunchIndex, primaryRayOrigin, primaryRayDirection);
 	
-	float2 samplePos = (float2) LaunchIndex / (float2) LaunchDimensions + float2(0.5f / (float) LaunchDimensions.x, 0.5f / (float) LaunchDimensions.y);
-	float4 normalAndDepth = NormalTextureInput.SampleLevel(g_sampler, samplePos, 0);
-	float4 worldPosition = PositionTextureInput.SampleLevel(g_sampler, samplePos, 0);
+	float2 pixelCenter = (float2) LaunchIndex / (float2) LaunchDimensions + float2(0.5f / (float) LaunchDimensions.x, 0.5f / (float) LaunchDimensions.y);
+	float4 normalAndDepth = NormalTextureInput.SampleLevel(g_sampler, pixelCenter, 0);
 	float3 pixelWorldSpacePosition = primaryRayOrigin + (primaryRayDirection * normalAndDepth.w);
 
+	//RTOutput[LaunchIndex] = float4(normalAndDepth.w, normalAndDepth.w, normalAndDepth.w, 1.0f);
+	//return;
+	
 	if (normalAndDepth.w == 0.0f)
 	{
         // Terminate if primary ray didn't hit anything
@@ -176,18 +152,12 @@ void RayGen()
 		return;
 	}
 	
-	float3 n = normalize(normalAndDepth.xyz);
-	float3 rvec = primaryRayDirection;
-	float3 b1 = normalize(rvec - n * dot(rvec, n));
-	float3 b2 = cross(n, b1);
-	float3x3 tbn = float3x3(b1, b2, n);
-	
 	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_cubeCB.frameCount);
-	float3 worldDir = getCosHemisphereSample(seed, normalAndDepth.xyz);
+	float3 worldDir = getCosHemisphereSample(seed.x, normalAndDepth.xyz);
 	
 	RayDesc aoRay;
 	RayPayload payload;
-	float3 aoSampleDirection = worldDir; //mul(worldDir, tbn);
+	float3 aoSampleDirection = worldDir;
 	float ao = 0.0f;
 
 	aoRay.Origin = pixelWorldSpacePosition;
@@ -201,125 +171,13 @@ void RayGen()
 	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, aoRay, payload);
 	ao = payload.T / g_aoCB.aoRadius;
 	
-	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, ao); //< Replace all cached AO with current result
-	
-	// Calculate AO
-	//uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_cubeCB.frameCount);
-	//float3 worldDir = getCosHemisphereSample(seed, normalAndDepth.xyz);
-	
-	//float aoVal = shootAmbientOcclusionRay(pixelWorldSpacePosition, worldDir, g_aoCB.minT, g_aoCB.aoRadius);
-	//RTOutput[DispatchRaysIndex().xy] = float4(aoVal, aoVal, aoVal, 1.0f);
-	
-
-	// Pick subset of samples to use based on "frame number % 4" and position on screen within a block of 3x3 pixels
-	//int pixelIdx = dot(int2(fmod(float2(LaunchIndex), 3)), int2(1, 3));
-	//int currentSamplesStartIndex = sampleStartIndex + (pixelIdx * samplesCount) + int(frameNumber * samplesCount * 9);
-
-	//// Construct TBN matrix to orient sampling hemisphere along the surface normal
-	//float3 n = normalize(normalAndDepth.xyz);
-   
-	//float3 rvec = primaryRayDirection;
-	//float3 b1 = normalize(rvec - n * dot(rvec, n));
-	//float3 b2 = cross(n, b1);
-	//float3x3 tbn = float3x3(b1, b2, n);
-
-	//RayDesc aoRay;
-	//HitInfo aoHitData;
-
-	//aoRay.Origin = pixelWorldSpacePosition;
-	//aoRay.TMin = 0.1f;
-	//aoRay.TMax = aoRadius; //< Set max ray length to AO radius for early termination
-
-	//float ao = 0.0f;
-
-	//[unroll(4)]
-	//for (int i = 0; i < samplesCount; i++)
-	//{
-	//	float3 aoSampleDirection = mul(aoSamplesTexture.Load(int2(currentSamplesStartIndex + i, 0)).rgb, tbn);
-
-	//	// Setup the ray
-	//	aoRay.Direction = aoSampleDirection;
-	//	aoHitData.T = aoRadius; //< Set T to "maximum", to produce no occlusion in case ray doesn't hit anything (miss shader won't modify this value)
-
-	//	// Trace the ray
-	//	TraceRay(
-	//		SceneBVH,
-	//		RAY_FLAG_NONE,
-	//		0xFF,
-	//		0,
-	//		0,
-	//		0,
-	//		aoRay,
-	//		aoHitData);
-
-	//	ao += aoHitData.T / aoRadius;
-	//}
-
-	//ao /= float(samplesCount);
-
-	//// Reverse reprojection
-	//float4 previousPixelViewSpacePosition = mul(previousViewMatrix, float4(pixelWorldSpacePosition, 1.0f));
-	//float previousReprojectedLinearDepth = length(previousPixelViewSpacePosition.xyz);
-	//float4 previousPixelScreenSpacePosition = mul(motionVectorsMatrix, float4(pixelWorldSpacePosition, 1.0f));
-	//previousPixelScreenSpacePosition.xyz /= previousPixelScreenSpacePosition.w;
-
-	//float2 previousUvs = (previousPixelScreenSpacePosition.xy * float2(0.5f, -0.5f)) + 0.5f;
-
-	//bool isReprojectionValid = true;
-
-	//// Discard invalid reprojection (outside of the frame)
-	//if (previousUvs.x > 1.0f || previousUvs.x < 0.0f ||
- //       previousUvs.y > 1.0f || previousUvs.y < 0.0f)
-	//	isReprojectionValid = false;
-
-	//// Discard invalid reprojection (depth mismatch)
-	//const float maxReprojectionDepthDifference = 0.03f;
-	//float previousSampledLinearDepth = normalAndDepthsPrevious.SampleLevel(linearClampSampler, previousUvs.xy, 0).a;
-
-	//if (abs(1.0f - (previousReprojectedLinearDepth / previousSampledLinearDepth)) > maxReprojectionDepthDifference)
-	//	isReprojectionValid = false;
-
- //   // Store AO to history cache
-	//if (isReprojectionValid) 
-	//	aoOutput[LaunchIndex.xy] = float4(ao, aoPrevious.SampleLevel(linearClampSampler, previousUvs.xy, 0).rgb); //< Store current AO in history cache
-	//else
-	//	aoOutput[LaunchIndex.xy] = float4(ao, ao, ao, ao); //< Replace all cached AO with current result
-	
-	
-	
-	//
-	
-	//uint2 pixIdx = DispatchRaysIndex().xy;
-	//uint2 numPix = DispatchRaysDimensions().xy;
-	
-	//// Center position of sampled pixel in textures
-	//float2 samplePos = (float2) pixIdx / (float2) numPix + float2(0.5f / (float) numPix.x, 0.5f / (float) numPix.y);
-	
-	//float3 worldNormal = NormalTextureInput.SampleLevel(g_sampler, samplePos, 0).rgb;
-	//float4 worldPosition = PositionTextureInput.SampleLevel(g_sampler, samplePos, 0);
-	
-	//float aoVal = 1.0f;
-	
-	//if (worldPosition.w != 0.0f)
-	//{
-	//	uint seed = initRand(pixIdx.x + pixIdx.y * numPix.x, g_cubeCB.frameCount);
-	//	float3 worldDir = getCosHemisphereSample(seed, worldNormal);
-	
-	//	aoVal = shootAmbientOcclusionRay(worldPosition.xyz, worldDir, g_aoCB.minT, g_aoCB.aoRadius);
-	//	RTOutput[DispatchRaysIndex().xy] = float4(aoVal, aoVal, aoVal, 1.0f);
-	//}
-	//else
-	//{
-	//	RTOutput[DispatchRaysIndex().xy] = float4(worldNormal.xyz, 1.0f);
-	//}
-	
-	//RTOutput[DispatchRaysIndex().xy] = float4(g_aoCB.aoRadius, g_aoCB.aoRadius, g_aoCB.aoRadius, 1.0f);
-	}
+	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, 1.0f); //< Replace all cached AO with current result
+}
 
 [shader("miss")]
 void Miss(inout RayPayload payload : SV_RayPayload)
 {
-	
+	// Empty
 }
 
 [shader("closesthit")]

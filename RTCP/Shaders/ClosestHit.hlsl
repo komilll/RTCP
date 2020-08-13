@@ -30,10 +30,8 @@ void ClosestHit(inout RayPayload payload, in Attributes attrib)
 	//float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
 	//float4 color = g_sceneCB.lightAmbientColor + diffuseColor;
 	
-	RTOutputPosition[DispatchRaysIndex().xy] = float4(hitPosition, 1.0f);
-	RTOutputNormal[DispatchRaysIndex().xy] = float4(triangleNormal, RayTCurrent());
-	
-	//payload.color = float4(triangleNormal, 1);
+	payload.worldPos = float4(hitPosition, 1);
+	payload.normalWithDepth = float4(triangleNormal, RayTCurrent());
 }
 
 #endif // _CLOSEST_HIT_HLSL

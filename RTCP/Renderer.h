@@ -180,7 +180,7 @@ private:
 #pragma endregion
 	
 #pragma region Raytracing variables
-	// Raytracing - Acceleration structures - BLAS
+	// Raytracing - resources containing all data for single raytracing shaders group
 	std::shared_ptr<RaytracingResources> m_raytracingNormal = NULL;
 	std::shared_ptr<RaytracingResources> m_raytracingAO = NULL;
 
