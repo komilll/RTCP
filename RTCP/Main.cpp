@@ -30,9 +30,24 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
     m_inputManager = std::shared_ptr<InputManager>(new InputManager());
     m_deviceManager = deviceManager;
     m_renderer = renderer;
+    m_guiManager = std::shared_ptr<GuiManager>(new GuiManager(m_renderer->m_device.Get(), renderer.get()));
 
     m_isInitialized = true;
     ::ShowWindow(m_hwnd, SW_SHOW);
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsClassic();
+
+    // Setup Platform/Renderer bindings
+    ImGui_ImplWin32_Init(m_hwnd);
 
     bool bGotMsg;
     MSG msg = {};
@@ -48,7 +63,7 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
         {
             //Change camera position
             {
-                constexpr float xStrengthPosition = 0.1f, yStrengthPosition = xStrengthPosition, zStrengthPosition = xStrengthPosition;
+                constexpr float xStrengthPosition = 1.0f, yStrengthPosition = xStrengthPosition, zStrengthPosition = xStrengthPosition;
                 const float x = xStrengthPosition * (m_inputManager->IsKeyDown(VK_A) ? -1.0f : (m_inputManager->IsKeyDown(VK_D) ? 1.0f : 0.0f));
                 const float y = yStrengthPosition * (m_inputManager->IsKeyDown(VK_E) ? 1.0f : (m_inputManager->IsKeyDown(VK_Q) ? -1.0f : 0.0f));
                 const float z = zStrengthPosition * (m_inputManager->IsKeyDown(VK_W) ? 1.0f : (m_inputManager->IsKeyDown(VK_S) ? -1.0f : 0.0f));
@@ -76,8 +91,18 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
     return result;
 }
 
+// Forward declare message handler from imgui_impl_win32.cpp
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 LRESULT Main::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    if (ImGui::GetCurrentContext() == NULL)
+    {
+        ImGui::CreateContext();
+    }
+
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, message, wParam, lParam))
+        return true;
+
     if (m_isInitialized)
     {
         bool alt = false;
@@ -89,6 +114,10 @@ LRESULT Main::WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
         case WM_PAINT:
             m_renderer->OnUpdate();
+
+            m_renderer->PopulateCommandList();
+            self->RenderGUI();
+            m_renderer->CloseCommandList();
             m_renderer->OnRender();
             break;
 
@@ -230,4 +259,15 @@ void Main::ToggleFullscreen()
         ::SetWindowPos(m_hwnd, HWND_NOTOPMOST, m_windowRect.left, m_windowRect.top, m_windowRect.right - m_windowRect.left, m_windowRect.bottom - m_windowRect.top, SWP_FRAMECHANGED | SWP_NOACTIVATE);
         ::ShowWindow(m_hwnd, SW_NORMAL);
     }
+}
+
+void Main::RenderGUI()
+{
+    // Render ImGui
+    CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_renderer->m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_renderer->m_frameIndex, m_renderer->m_rtvDescriptorSize);
+    CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_renderer->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+    m_renderer->m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+    m_renderer->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderer->m_backBuffers[m_renderer->m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+    m_guiManager->Render(m_renderer->m_commandList.Get());
+    m_renderer->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderer->m_backBuffers[m_renderer->m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 }

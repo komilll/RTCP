@@ -320,7 +320,7 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
     // 2 for Shader Config (config and association)
     // 1 for Global Root Signature
     // 1 for Pipeline Config	
-        UINT index = 0;
+    UINT index = 0;
     std::vector<D3D12_STATE_SUBOBJECT> subobjects;
     subobjects.resize(m_hitShader.ahs.name != nullptr ? 11 : 10);
 

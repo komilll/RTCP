@@ -2,6 +2,8 @@
 
 #pragma comment(lib, "d3dcompiler.lib")
 #include <d3dcompiler.h>
+#include <random>
+#include <chrono>
 
 #include "pch.h"
 #include "DeviceManager.h"
@@ -19,6 +21,8 @@ typedef std::array<D3D12_INPUT_ELEMENT_DESC, 5> BasicInputLayout;
 
 class Renderer
 {
+	friend class GuiManager;
+	friend class Main;
 public:
 	// No default constructor
 	Renderer(std::shared_ptr<DeviceManager> deviceManager, HWND hwnd);
@@ -45,6 +49,7 @@ private:
 
 	// Executing commands/synchronization functions
 	void PopulateCommandList();
+	void CloseCommandList();
 	void WaitForPreviousFrame();
 	void MoveToNextFrame();
 
@@ -114,13 +119,20 @@ private:
 	// DEBUG PROPERTIES
 	bool FREEZE_CAMERA = false;
 	bool DO_RAYTRACING = true;
+	bool USE_AO_FRAME_JITTER = false;
+	bool USE_AO_THIN_LENS = false;
 
 	// Camera settings
 	XMFLOAT3 m_cameraPosition{ 0,0,0 };
 	XMFLOAT3 m_cameraRotation{ 0,0,0 };
 	XMFLOAT3 m_cameraPositionStoredInFrame{ 0,0,0 };
 
+	// Random number generator
+	std::uniform_real_distribution<float> m_rngDist;
+	std::mt19937 m_rng;
+
 	// Helper variables
+	bool m_resetFrameAO = false;
 	UINT m_rtvDescriptorSize = 0;
 
 	// Pipeline variables - device, commandQueue, swap chain

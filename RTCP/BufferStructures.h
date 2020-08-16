@@ -43,9 +43,18 @@ typedef struct _cubeConstantBuffer
 
 typedef struct _aoConstantBuffer
 {
-	float aoRadius;
-	float minT;
-	XMFLOAT2 padding;
+	float aoRadius = 1.0f;
+	float minT = 1e-4f;
+	XMFLOAT2 jitterCamera;
+
+	int accFrames;
+	float fNumber = 32.0f;
+	float focalLength = 1.0f;
+	float lensRadius;
+
+	XMFLOAT4 cameraU;
+	XMFLOAT4 cameraV;
+	XMFLOAT4 cameraW;
 } AoConstantBuffer;
 
 #endif // !_BUFFER_STRUCTURES_H_

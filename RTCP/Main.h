@@ -4,6 +4,7 @@
 #include "DeviceManager.h"
 #include "Renderer.h"
 #include "InputManager.h"
+#include "GuiManager.h"
 
 class Main
 {
@@ -20,6 +21,8 @@ private:
 
 	void ToggleFullscreen();
 
+	void RenderGUI();
+
 private:
 	HWND m_hwnd = NULL;
 	RECT m_windowRect;
@@ -30,6 +33,7 @@ private:
 static std::shared_ptr<DeviceManager> m_deviceManager;
 static std::shared_ptr<Renderer> m_renderer;
 static std::shared_ptr<InputManager> m_inputManager;
+static std::shared_ptr<GuiManager> m_guiManager;
 static bool m_isInitialized;
 static Main* self;
 static std::wstring m_windowClassName = L"RTCP";

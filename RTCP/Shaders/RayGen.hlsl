@@ -19,7 +19,7 @@ void RayGen()
 	
 	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
 	//RAY_FLAG_CULL_BACK_FACING_TRIANGLES
-
+	
 	RTOutputNormal[DispatchRaysIndex().xy] = payload.normalWithDepth;
 	RTOutputPosition[DispatchRaysIndex().xy] = payload.worldPos;
 }

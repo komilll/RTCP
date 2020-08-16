@@ -9,7 +9,6 @@
 void ClosestHit(inout RayPayload payload, in Attributes attrib)
 {
 	float3 hitPosition = HitWorldPosition();
-	float3 barycentrics = float3(1.f - attrib.bary.x - attrib.bary.y, attrib.bary.x, attrib.bary.y);
 	
 	uint indexSizeInBytes = 4;
 	uint indicesPerTriangle = 3;
@@ -25,8 +24,8 @@ void ClosestHit(inout RayPayload payload, in Attributes attrib)
 		vertices[indices_[2]].normal
 	};
 	
-	float3 triangleNormal = vertexNormals[0] * barycentrics.x + vertexNormals[1] * barycentrics.y + vertexNormals[2] * barycentrics.z;
-	
+	float3 triangleNormal = HitAttribute(vertexNormals, attrib);
+		
 	//float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
 	//float4 color = g_sceneCB.lightAmbientColor + diffuseColor;
 	

@@ -22,13 +22,14 @@ Renderer::Renderer(std::shared_ptr<DeviceManager> deviceManager, HWND hwnd)
     m_scissorRect.bottom = static_cast<LONG>(m_windowHeight);
 
     m_cameraPosition = XMFLOAT3{ 15.0f, 3.5f, -25.0f };
+    m_cameraRotation = XMFLOAT3{ 0,0,0 };
     CreateViewAndPerspective();
 }
 
 void Renderer::OnRender()
 {
     // Prepare commands to execute
-    PopulateCommandList();
+    //PopulateCommandList(); // Moved to main.cpp
 
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get(), m_commandListSkybox.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
@@ -42,10 +43,16 @@ void Renderer::OnInit(HWND hwnd)
     // Preparing devices, resources, views to enable rendering
     LoadPipeline(hwnd);
     LoadAssets();
+
+    auto now = std::chrono::high_resolution_clock::now();
+    auto msTime = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
+    m_rng = std::mt19937(uint32_t(msTime.time_since_epoch().count()));
 }
 
 void Renderer::OnUpdate()
 {
+    XMMATRIX lastFrameView = m_constantBuffer.value.view;
+
     CreateViewAndPerspective();
     // Update vertexShader.hlsl
     {
@@ -75,14 +82,62 @@ void Renderer::OnUpdate()
     // Update raygeneration cbuffer - cube CB
     {
         m_cubeBuffer.value.frameCount++;
-        m_cubeBuffer.value.frameCount %= 8;
+        m_cubeBuffer.value.frameCount %= INT_MAX;
         m_cubeBuffer.Update();
     }
     // Update ao cbuffer - ao CB
-    {
-        m_aoBuffer.value.aoRadius = 1.0f;
-        m_aoBuffer.value.minT = 1e-4f;
-        m_aoBuffer.value.padding = {};
+    {        
+        for (int i = 0; i < 4; ++i) 
+        {
+            for (int j = 0; j < 4; ++j)
+            {
+                if (lastFrameView.r[i].m128_f32[j] != m_constantBuffer.value.view.r[i].m128_f32[j])
+                {
+                    m_resetFrameAO = true;
+                    break;
+                }
+            }
+            if (m_resetFrameAO)
+            {
+                break;
+            }
+        }
+
+        if (!m_resetFrameAO)
+        {
+            m_aoBuffer.value.accFrames++;
+        }
+        else
+        {
+            m_resetFrameAO = false;
+            m_aoBuffer.value.accFrames = 0;
+        }
+
+        if (USE_AO_FRAME_JITTER)
+        {
+            float x = (m_rngDist(m_rng) - 0.5f);// / static_cast<float>(m_windowWidth);
+            float y = (m_rngDist(m_rng) - 0.5f);// / static_cast<float>(m_windowHeight);
+            m_aoBuffer.value.jitterCamera = { x, y };
+        }
+        else
+        {
+            m_aoBuffer.value.jitterCamera = { 0.5f, 0.5f };
+        }
+
+        m_aoBuffer.value.lensRadius = USE_AO_THIN_LENS ? m_aoBuffer.value.focalLength / (2.0f * m_aoBuffer.value.fNumber) : 0.0f;
+
+        constexpr float conv{ 0.0174532925f };
+        const XMMATRIX rotationMatrix = XMMatrixRotationRollPitchYaw(m_cameraRotation.x * conv, m_cameraRotation.y * conv, m_cameraRotation.z * conv);
+        const XMMATRIX YrotationMatrix = XMMatrixRotationY(m_cameraRotation.y * conv);
+        const XMVECTOR camRight = XMVector3TransformCoord(XMVECTOR{ 1,0,0,0 }, YrotationMatrix);
+        const XMVECTOR camForward = XMVector3TransformCoord(XMVECTOR{ 0, 0, 1, 0 }, rotationMatrix);
+        const XMVECTOR camUp = XMVector3Cross(camRight, camForward);
+
+        m_aoBuffer.value.cameraU = XMFLOAT4{ camRight.m128_f32[0], camRight.m128_f32[1], camRight.m128_f32[2], 1 };
+        m_aoBuffer.value.cameraV = XMFLOAT4{ camUp.m128_f32[0], camUp.m128_f32[1], camUp.m128_f32[2], 1 };
+        m_aoBuffer.value.cameraW = XMFLOAT4{ camForward.m128_f32[0], camForward.m128_f32[1], camForward.m128_f32[2], 1 };
+
+        //m_aoBuffer.value.padding = {};
         m_aoBuffer.Update();
     }
 }
@@ -103,6 +158,7 @@ void Renderer::AddCameraPosition(float x, float y, float z)
         m_cameraPositionStoredInFrame.y = y;
         m_cameraPositionStoredInFrame.z = z;
         CreateViewAndPerspective();
+        m_resetFrameAO = true;
     }
 }
 
@@ -126,6 +182,7 @@ void Renderer::AddCameraRotation(float x, float y, float z)
         m_cameraRotation.x = m_cameraRotation.x >= 90.0f ? 89.9f : (m_cameraRotation.x <= -90.0f ? -89.9f : m_cameraRotation.x);
 
         CreateViewAndPerspective();
+        m_resetFrameAO = true;
     }
 }
 
@@ -496,10 +553,6 @@ void Renderer::PopulateCommandList()
 
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtPositionTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-
-        // CLOSE COMMAND LISTS
-        ThrowIfFailed(m_commandList->Close());
-        ThrowIfFailed(m_commandListSkybox->Close());
     }
     else
     {
@@ -567,10 +620,13 @@ void Renderer::PopulateCommandList()
         // Indicate that the back buffer will now be used to present.
         m_commandListSkybox->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
         //////////////////////
-
-        ThrowIfFailed(m_commandList->Close());
-        ThrowIfFailed(m_commandListSkybox->Close());
     }
+}
+
+void Renderer::CloseCommandList()
+{
+    ThrowIfFailed(m_commandList->Close());
+    ThrowIfFailed(m_commandListSkybox->Close());
 }
 
 void Renderer::WaitForPreviousFrame()
@@ -932,7 +988,7 @@ void Renderer::PrepareRaytracingResourcesAO()
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, srvDesc } });
     textures.push_back({ TextureWithDesc{m_rtPositionTexture, srvDesc } });
 
-    CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, m_aoBuffer);
+    CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, m_aoBuffer, sizeof(XMFLOAT4) * 2);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
