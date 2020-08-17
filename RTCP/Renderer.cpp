@@ -385,10 +385,6 @@ void Renderer::LoadAssets()
     // Prepare shader compilator
     InitShaderCompiler(m_shaderCompiler);
 
-    // Preparation of raytracing
-    PrepareRaytracingResources();
-    PrepareRaytracingResourcesAO();
-
     // Create the constant buffer
     {
         ThrowIfFailed(m_device->CreateCommittedResource(
@@ -439,8 +435,8 @@ void Renderer::LoadAssets()
     ComPtr<ID3D12Resource> uploadHeap;
     // Create texture for rasterized object
     {
-        CreateTextureFromFileRTCP(m_texture, m_commandList, L"Pebles.png", uploadHeap);
-        CreateSRV_Texture2D(m_texture, m_srvHeap.Get(), 0, m_device.Get());
+        CreateTextureFromFileRTCP(m_texture, m_commandList, L"Pebles.png", uploadHeap, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        //CreateSRV_Texture2D(m_texture, m_srvHeap.Get(), 0, m_device.Get());
     }
 
     ComPtr<ID3D12Resource> skyboxUploadHeap;
@@ -449,6 +445,10 @@ void Renderer::LoadAssets()
         CreateTextureFromFileRTCP(m_skyboxTexture, m_commandListSkybox, L"Skyboxes/cubemap.dds", skyboxUploadHeap);
         CreateSRV_TextureCube(m_skyboxTexture, m_srvHeap.Get(), 1, m_device.Get());
     }
+
+    // Preparation of raytracing
+    PrepareRaytracingResources();
+    PrepareRaytracingResourcesAO();
 
     // Close the command list and execute it to begin the initial GPU setup.
     ThrowIfFailed(m_commandList->Close());
@@ -515,7 +515,7 @@ void Renderer::PopulateCommandList()
 
         /* RTAO NOISE ALGORITHM */
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtPositionTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+        //m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtPositionTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
          //Set the UAV/SRV/CBV and sampler heaps
         {
@@ -552,7 +552,7 @@ void Renderer::PopulateCommandList()
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtPositionTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+        //m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtPositionTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));        
     }
     else
     {
@@ -899,13 +899,13 @@ void Renderer::CreateTexture2D(ComPtr<ID3D12Resource>& texture, UINT64 width, UI
     ));
 }
 
-void Renderer::CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr<ID3D12GraphicsCommandList4> commandList, const wchar_t* path, ComPtr<ID3D12Resource>& uploadHeap)
+void Renderer::CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr<ID3D12GraphicsCommandList4> commandList, const wchar_t* path, ComPtr<ID3D12Resource>& uploadHeap, D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES InitialResourceState)
 {
     std::unique_ptr<uint8_t[]> decodedData;
     std::vector<D3D12_SUBRESOURCE_DATA> textureData;
     D3D12_SUBRESOURCE_DATA textureDataSingle;
 
-    if (SUCCEEDED(LoadDDSTextureFromFileEx(m_device.Get(), path, 0, D3D12_RESOURCE_FLAG_NONE, DDS_LOADER_DEFAULT, texture.ReleaseAndGetAddressOf(), decodedData, textureData))) 
+    if (SUCCEEDED(LoadDDSTextureFromFileEx(m_device.Get(), path, 0, flags, DDS_LOADER_DEFAULT, texture.ReleaseAndGetAddressOf(), decodedData, textureData)))
     {
         const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texture.Get(), 0, static_cast<UINT>(textureData.size()));
 
@@ -920,13 +920,14 @@ void Renderer::CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr
         ));
 
         UpdateSubresources(commandList.Get(), texture.Get(), uploadHeap.Get(), 0, 0, static_cast<UINT>(textureData.size()), &textureData[0]);
-        commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+        commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, InitialResourceState));
     }
     else
     {
-        ThrowIfFailed(LoadWICTextureFromFileEx(m_device.Get(), path, 0, D3D12_RESOURCE_FLAG_NONE, WIC_LOADER_FORCE_RGBA32, texture.ReleaseAndGetAddressOf(), decodedData, textureDataSingle));
+        ThrowIfFailed(LoadWICTextureFromFileEx(m_device.Get(), path, 0, flags, WIC_LOADER_FORCE_RGBA32, texture.ReleaseAndGetAddressOf(), decodedData, textureDataSingle));
 
         const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texture.Get(), 0, 1);
+        auto desc = texture->GetDesc();
 
         // uploadHeap must outlive this function - until command list is closed
         ThrowIfFailed(m_device->CreateCommittedResource(
@@ -938,14 +939,15 @@ void Renderer::CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr
             IID_PPV_ARGS(&uploadHeap)
         ));
 
+        //CreateTexture2D(texture, desc.Width, desc.Height, desc.Format, desc.Layout, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_COPY_DEST);
         UpdateSubresources(commandList.Get(), texture.Get(), uploadHeap.Get(), 0, 0, 1, &textureDataSingle);
-        commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+        commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, InitialResourceState));
     }
 }
 
 void Renderer::PrepareRaytracingResources()
 {
-    const std::shared_ptr<ModelClass> model = m_modelBuddha;
+    const std::shared_ptr<ModelClass> model = m_modelSphere;
 
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
@@ -966,7 +968,7 @@ void Renderer::PrepareRaytracingResources()
 
 void Renderer::PrepareRaytracingResourcesAO()
 {
-    const std::shared_ptr<ModelClass> model = m_modelBuddha;
+    const std::shared_ptr<ModelClass> model = m_modelSphere;
 
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
@@ -986,7 +988,7 @@ void Renderer::PrepareRaytracingResourcesAO()
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
     srvDesc.Texture2D.MipLevels = 1;
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, srvDesc } });
-    textures.push_back({ TextureWithDesc{m_rtPositionTexture, srvDesc } });
+    textures.push_back({ TextureWithDesc{m_texture, srvDesc } });
 
     CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, m_aoBuffer, sizeof(XMFLOAT4) * 2);
 }

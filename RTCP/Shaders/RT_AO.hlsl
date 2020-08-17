@@ -19,12 +19,9 @@ struct RayPayload
 	float T;
 	int missShader;
 	float3 normal;
+	float3 albedo;
 };
 
-struct Attributes
-{
-	float2 bary;
-};
 ////
 
 // Constant Buffers
@@ -70,7 +67,7 @@ RaytracingAccelerationStructure SceneBVH : register(t0);
 ByteAddressBuffer indices : register(t1);
 StructuredBuffer<Vertex> vertices : register(t2);
 Texture2D<float4> NormalTextureInput : register(t3);
-Texture2D<float4> PositionTextureInput : register(t4);
+Texture2D<float4> albedoTexture : register(t4);
 
 SamplerState g_sampler : register(s0);
 ////
@@ -183,6 +180,8 @@ void RayGen()
 		RTOutput[LaunchIndex] = float4(1.0f, 1.0f, 1.0f, 1.0f);
 		return;
 	}
+	RTOutput[LaunchIndex.xy] = float4(payload.albedo, 1.0f);
+	return;
 	
 	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_cubeCB.frameCount);
 	float3 worldDir = getCosHemisphereSample(seed.x, normalAndDepth.xyz);
@@ -221,16 +220,24 @@ uint3 Load3x32BitIndices(uint offsetBytes)
 }
 
 // Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
-float3 HitAttribute(float3 vertexAttribute[3], Attributes attrib)
+float3 HitAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attrib)
 {
 	return vertexAttribute[0] +
-        attrib.bary.x * (vertexAttribute[1] - vertexAttribute[0]) +
-        attrib.bary.y * (vertexAttribute[2] - vertexAttribute[0]);
+        attrib.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        attrib.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
+}
+
+float2 HitAttribute(float2 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attrib)
+{
+	return vertexAttribute[0] +
+        attrib.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        attrib.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
 }
 
 [shader("closesthit")]
-void ClosestHit(inout RayPayload payload, in Attributes attrib)
+void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
+	float3 barycentrics = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 	payload.T = RayTCurrent();
 	
 	uint indexSizeInBytes = 4;
@@ -247,8 +254,19 @@ void ClosestHit(inout RayPayload payload, in Attributes attrib)
 		vertices[indices_[2]].normal
 	};
 	
-	float3 triangleNormal = HitAttribute(vertexNormals, attrib);
+	float2 vertexUVs[3] =
+	{
+		vertices[indices_[0]].uv,
+		vertices[indices_[1]].uv,
+		vertices[indices_[2]].uv
+	};
+	
+	float3 triangleNormal = HitAttribute(vertexNormals, attribs).xyz;
+	float2 uv = HitAttribute(vertexUVs, attribs);
+	uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
+	
 	payload.normal = triangleNormal;
+	payload.albedo = albedoTexture.SampleLevel(g_sampler, uv, 0).rgb;
 }
 
 #endif //_RT_AO_HLSL_

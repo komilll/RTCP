@@ -264,10 +264,12 @@ void Main::ToggleFullscreen()
 void Main::RenderGUI()
 {
     // Render ImGui
+    auto commandList = m_renderer->DO_RAYTRACING ? m_renderer->m_commandList : m_renderer->m_commandListSkybox;
+
     CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_renderer->m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_renderer->m_frameIndex, m_renderer->m_rtvDescriptorSize);
     CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_renderer->m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
-    m_renderer->m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
-    m_renderer->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderer->m_backBuffers[m_renderer->m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
-    m_guiManager->Render(m_renderer->m_commandList.Get());
-    m_renderer->m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderer->m_backBuffers[m_renderer->m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+    commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderer->m_backBuffers[m_renderer->m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+    m_guiManager->Render(commandList.Get());
+    commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_renderer->m_backBuffers[m_renderer->m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 }
