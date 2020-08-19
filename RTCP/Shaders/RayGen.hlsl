@@ -3,14 +3,18 @@
 
 #include "Common.hlsl"
 #include "UniformDistribution.hlsl"
+#include "RT_HelperFunctions.hlsl"
 
 [shader("raygeneration")]
 void RayGen()
 {
-	float3 rayDir, origin, world;
+	uint2 LaunchIndex = DispatchRaysIndex().xy;
+	uint2 LaunchDimensions = DispatchRaysDimensions().xy;
+	float3 rayDir;
+	float3 origin = g_sceneCB.cameraPosition.xyz;
     
     // Generate a ray for a camera pixel corresponding to an index from the dispatched 2D grid.
-	GenerateCameraRay(DispatchRaysIndex().xy, origin, rayDir);
+	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, origin, rayDir, g_sceneCB, g_cameraCB);
 
 	RayDesc ray = { origin, 1e-4f, rayDir, 1e+38f};
 	RayPayload payload;

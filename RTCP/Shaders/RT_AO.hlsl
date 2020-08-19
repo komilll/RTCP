@@ -3,6 +3,8 @@
 
 #include "RT_HelperFunctions.hlsl"
 #include "UniformDistribution.hlsl"
+#include "SamplingHelper.hlsl"
+#include "ALL_CommonBuffers.hlsl"
 
 // Structures
 struct Vertex
@@ -17,48 +19,22 @@ struct Vertex
 struct RayPayload
 {
 	float T;
-	int missShader;
-	float3 normal;
-	float3 albedo;
 };
 
 ////
-
-// Constant Buffers
-struct SceneConstantBuffer
-{
-	matrix projectionToWorld;
-	float4 cameraPosition;
-	float4 lightPosition;
-	float4 lightAmbientColor;
-	float4 lightDiffuseColor;
-};
-////
-struct CubeConstantBuffer
-{
-	float3 albedo;
-	int frameCount;
-};
 
 struct RaytracingAOBuffer
 {
 	float aoRadius;
 	float minT;
-	float2 jitterCamera;
-	
 	int accFrames;
-	float fNumber;
-	float focalLength;
-	float lensRadius;
-	
-	float4 cameraU;
-	float4 cameraV;
-	float4 cameraW;
+
+	float padding[61];
 };
 
 // Resources
 ConstantBuffer<SceneConstantBuffer> g_sceneCB : register(b0);
-ConstantBuffer<CubeConstantBuffer> g_cubeCB : register(b1);
+ConstantBuffer<CameraConstantBuffer> g_cameraCB : register(b1);
 ConstantBuffer<RaytracingAOBuffer> g_aoCB : register(b2);
 
 RWTexture2D<float4> RTOutput : register(u0);
@@ -69,61 +45,11 @@ StructuredBuffer<Vertex> vertices : register(t2);
 Texture2D<float4> NormalTextureInput : register(t3);
 Texture2D<float4> albedoTexture : register(t4);
 
-SamplerState g_sampler : register(s0);
 ////
 
-// NVIDIA function - https://github.com/NVIDIAGameWorks/GettingStartedWithRTXRayTracing/blob/master/11-OneShadowRayPerPixel/Data/Tutorial11/diffusePlus1ShadowUtils.hlsli
-uint initRand(uint val0, uint val1, uint backoff = 16)
+inline void GenerateCameraRayAO(uint2 index, out float3 origin, out float3 direction)
 {
-	uint v0 = val0, v1 = val1, s0 = 0;
-
-	[unroll]
-	for (uint n = 0; n < backoff; n++)
-	{
-		s0 += 0x9e3779b9;
-		v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
-		v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
-	}
-	return v0;
-}
-
-// NVIDIA function - https://github.com/NVIDIAGameWorks/GettingStartedWithRTXRayTracing/blob/master/11-OneShadowRayPerPixel/Data/Tutorial11/diffusePlus1ShadowUtils.hlsli
-float nextRand(inout uint s)
-{
-	s = (1664525u * s + 1013904223u);
-	return float(s & 0x00FFFFFF) / float(0x01000000);
-}
-
-// NVIDIA function - https://github.com/NVIDIAGameWorks/GettingStartedWithRTXRayTracing/blob/master/11-OneShadowRayPerPixel/Data/Tutorial11/diffusePlus1ShadowUtils.hlsli
-float3 getPerpendicularVector(float3 u)
-{
-	float3 a = abs(u);
-	uint xm = ((a.x - a.y) < 0 && (a.x - a.z) < 0) ? 1 : 0;
-	uint ym = (a.y - a.z) < 0 ? (1 ^ xm) : 0;
-	uint zm = 1 ^ (xm | ym);
-	return cross(u, float3(xm, ym, zm));
-}
-
-// NVIDIA function - https://github.com/NVIDIAGameWorks/GettingStartedWithRTXRayTracing/blob/master/11-OneShadowRayPerPixel/Data/Tutorial11/diffusePlus1ShadowUtils.hlsli
-float3 getCosHemisphereSample(inout uint randSeed, float3 hitNorm)
-{
-	// Get 2 random numbers to select our sample with
-	float2 randVal = float2(nextRand(randSeed), nextRand(randSeed));
-
-	// Cosine weighted hemisphere sample from RNG
-	float3 bitangent = getPerpendicularVector(hitNorm);
-	float3 tangent = cross(bitangent, hitNorm);
-	float r = sqrt(randVal.x);
-	float phi = 2.0f * 3.14159265f * randVal.y;
-
-	// Get our cosine-weighted hemisphere lobe sample direction
-	return tangent * (r * cos(phi).x) + bitangent * (r * sin(phi)) + hitNorm.xyz * sqrt(1 - randVal.x);
-}
-
-inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
-{
-	float2 xy = index + g_aoCB.jitterCamera; // center in the middle of the pixel.
-	//float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0;
+	float2 xy = index + g_cameraCB.jitterCamera; // center in the middle of the pixel.
 	float2 screenPos = (xy / DispatchRaysDimensions().xy) * 2.0 - 1.0;
 
     // Invert Y for DirectX-style coordinates.
@@ -134,22 +60,18 @@ inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 directi
 	float4 world = mul(float4(screenPos, 0, 1), g_sceneCB.projectionToWorld);
 
 	world.xyz /= world.w;
-	//origin = g_sceneCB.cameraPosition.xyz;
-	//direction = normalize(world.xyz - origin);
-	direction = screenPos.x * g_aoCB.cameraU.xyz + screenPos.y * g_aoCB.cameraV.xyz + g_aoCB.cameraW.xyz;
-	direction /= length(g_aoCB.cameraW.xyz);
+	direction = screenPos.x * g_cameraCB.cameraU.xyz + screenPos.y * g_cameraCB.cameraV.xyz + g_cameraCB.cameraW.xyz;
+	direction /= length(g_cameraCB.cameraW.xyz);
 	
 	// Calculate random ray origin
-	float3 focalPoint = g_sceneCB.cameraPosition.xyz + g_aoCB.focalLength * direction;
+	float3 focalPoint = g_sceneCB.cameraPosition.xyz + g_cameraCB.focalLength * direction;
 	
-	uint randSeed = initRand(index.x + index.y * DispatchRaysDimensions().x, g_cubeCB.frameCount);
-	float2 rnd = float2(nextRand(randSeed) * PI * 2.0, nextRand(randSeed) * g_aoCB.lensRadius);
+	uint randSeed = initRand(index.x + index.y * DispatchRaysDimensions().x, g_sceneCB.frameCount);
+	float2 rnd = float2(nextRand(randSeed) * PI * 2.0, nextRand(randSeed) * g_cameraCB.lensRadius);
 	float2 uv = float2(cos(rnd.x) * rnd.y, sin(rnd.x) * rnd.y);
 	
-	origin = g_sceneCB.cameraPosition.xyz + uv.x * normalize(g_aoCB.cameraU.xyz) + uv.y * normalize(g_aoCB.cameraV.xyz);
-	//direction = normalize(world.xyz - origin);
+	origin = g_sceneCB.cameraPosition.xyz + uv.x * normalize(g_cameraCB.cameraU.xyz) + uv.y * normalize(g_cameraCB.cameraV.xyz);
 }
-
 
 [shader("raygeneration")]
 void RayGen()
@@ -157,61 +79,54 @@ void RayGen()
 	uint2 LaunchIndex = DispatchRaysIndex().xy;
 	uint2 LaunchDimensions = DispatchRaysDimensions().xy;
 
-	// Figure out pixel world space position (using length of a primary ray found in previous pass)
-	float3 primaryRayOrigin, primaryRayDirection; 
-	GenerateCameraRay(LaunchIndex, primaryRayOrigin, primaryRayDirection);
+	float4 normalAndDepth = NormalTextureInput.Load(int3(LaunchIndex, 0));
 	
-	RayDesc distRay = { primaryRayOrigin, 1e-4f, primaryRayDirection, 1e+38f };
-	RayPayload payload;
-	payload.T = g_aoCB.aoRadius;
-	payload.missShader = 0;
-	payload.normal = 0;
-	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, distRay, payload);
-	
-	float2 pixelCenter = (float2) LaunchIndex / (float2) LaunchDimensions + float2(0.5f / (float) LaunchDimensions.x, 0.5f / (float) LaunchDimensions.y);
-	float4 normalAndDepth;// = NormalTextureInput.SampleLevel(g_sampler, pixelCenter, 0);
-	normalAndDepth.xyz = payload.normal;
-	normalAndDepth.w = payload.T;
-	float3 pixelWorldSpacePosition = primaryRayOrigin + (primaryRayDirection * normalAndDepth.w);
-
-	if (payload.missShader == 1)
+	if (normalAndDepth.w == 0)
 	{
         // Terminate if primary ray didn't hit anything
 		RTOutput[LaunchIndex] = float4(1.0f, 1.0f, 1.0f, 1.0f);
 		return;
 	}
-	RTOutput[LaunchIndex.xy] = float4(payload.albedo, 1.0f);
-	return;
 	
-	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_cubeCB.frameCount);
+	// Figure out pixel world space position (using length of a primary ray found in previous pass)
+	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
+	float3 primaryRayDirection;
+	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection, g_sceneCB, g_cameraCB);
+	
+	// Calculate direction of raytracing for AO sample
+	float3 pixelWorldSpacePosition = primaryRayOrigin + (primaryRayDirection * normalAndDepth.w);
+	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount);
 	float3 worldDir = getCosHemisphereSample(seed.x, normalAndDepth.xyz);
 	
-	RayDesc aoRay;
-	//RayPayload payload;
-	float3 aoSampleDirection = worldDir;
+	// Prepare ray description and payload
 	float ao = 0.0f;
-
-	aoRay.Origin = pixelWorldSpacePosition;
-	aoRay.TMin = g_aoCB.minT;
-	aoRay.TMax = g_aoCB.aoRadius; //< Set max ray length to AO radius for early termination
-	aoRay.Direction = aoSampleDirection;
-	
+	RayDesc aoRay = { pixelWorldSpacePosition, g_aoCB.minT, worldDir, g_aoCB.aoRadius };
+	RayPayload payload;
 	payload.T = g_aoCB.aoRadius; //< Set T to "maximum", to produce no occlusion in case ray doesn't hit anything (miss shader won't modify this value)
 
 	// Trace the ray
 	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, aoRay, payload);
 	ao = payload.T / g_aoCB.aoRadius;
 	
+	// Accumulate AO with previous frames
 	float prevAO = RTOutput[LaunchIndex].x;
 	ao = ((float) g_aoCB.accFrames * prevAO + ao) / ((float) g_aoCB.accFrames + 1.0f);
 	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, 1.0f); //< Replace all cached AO with current result
+	
+	//// Lambert lighting
+	//float3 lightColor = g_sceneCB.lightDiffuseColor.rgb;
+	//float3 toLight = g_sceneCB.lightPosition.xyz - pixelWorldSpacePosition;
+	//float distToLight = length(toLight);
+	//toLight = normalize(toLight);
+
+	//float NoL = saturate(dot(payload.normal, toLight));
+	//float visibility = 
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload : SV_RayPayload)
 {
 	// Empty
-	payload.missShader = 1;
 }
 
 uint3 Load3x32BitIndices(uint offsetBytes)
@@ -237,36 +152,27 @@ float2 HitAttribute(float2 vertexAttribute[3], BuiltInTriangleIntersectionAttrib
 [shader("closesthit")]
 void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	float3 barycentrics = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
+	//float3 barycentrics = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 	payload.T = RayTCurrent();
 	
-	uint indexSizeInBytes = 4;
-	uint indicesPerTriangle = 3;
-	uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-	uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+	//uint indexSizeInBytes = 4;
+	//uint indicesPerTriangle = 3;
+	//uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+	//uint baseIndex = PrimitiveIndex() * triangleIndexStride;
 	
-	const uint3 indices_ = Load3x32BitIndices(baseIndex);
+	//const uint3 indices_ = Load3x32BitIndices(baseIndex);
 	
-	float3 vertexNormals[3] =
-	{
-		vertices[indices_[0]].normal,
-		vertices[indices_[1]].normal,
-		vertices[indices_[2]].normal
-	};
+	//float2 vertexUVs[3] =
+	//{
+	//	vertices[indices_[0]].uv,
+	//	vertices[indices_[1]].uv,
+	//	vertices[indices_[2]].uv
+	//};
 	
-	float2 vertexUVs[3] =
-	{
-		vertices[indices_[0]].uv,
-		vertices[indices_[1]].uv,
-		vertices[indices_[2]].uv
-	};
+	//float2 uv = HitAttribute(vertexUVs, attribs);
+	//uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
 	
-	float3 triangleNormal = HitAttribute(vertexNormals, attribs).xyz;
-	float2 uv = HitAttribute(vertexUVs, attribs);
-	uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
-	
-	payload.normal = triangleNormal;
-	payload.albedo = albedoTexture.SampleLevel(g_sampler, uv, 0).rgb;
+	//payload.albedo = albedoTexture.SampleLevel(g_sampler, uv, 0).rgb;
 }
 
 #endif //_RT_AO_HLSL_

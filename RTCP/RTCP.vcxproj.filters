@@ -184,6 +184,15 @@
     <FxCompile Include="Shaders\RT_HelperFunctions.hlsl">
       <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\RT_Lambertian.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\SamplingHelper.hlsl">
+      <Filter>Shaders\Helper</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ALL_CommonBuffers.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

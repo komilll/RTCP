@@ -25,9 +25,9 @@ RaytracingResources::RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12Gra
     CreateTLAS(device, commandList);
 }
 
-void RaytracingResources::CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize, size_t maxPayloadSize)
+void RaytracingResources::CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize, std::vector<bool> isUAV, size_t maxPayloadSize)
 {
-    CreateDxrPipelineAssets(device, model, texturesWithDesc, indexDesc, vertexDesc, buffersWithSize);
+    CreateDxrPipelineAssets(device, model, texturesWithDesc, indexDesc, vertexDesc, buffersWithSize, isUAV);
     CreateRTPSO(device, maxPayloadSize);
     CreateShaderTable(device);
 }
@@ -174,7 +174,7 @@ void RaytracingResources::CreateTLAS(ID3D12Device5* device, ComPtr<ID3D12Graphic
     commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_tlasResult.Get()));
 }
 
-void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize)
+void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize, std::vector<bool> isUAV)
 {
     // Create descriptor heaps
     {
@@ -196,16 +196,23 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
         // Create the CBV
         if (buffersWithSize.size() > 0)
         {
-            // First element
-            D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[0].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(buffersWithSize[0].second)) };
-            device->CreateConstantBufferView(&cbvDesc, handle);
+            bool firstPassed = false;
 
-            // Next elements
-            for (int i = 1; i < buffersWithSize.size(); ++i)
+            // Create CBVs one by one
+            for (int i = 0; i < buffersWithSize.size(); ++i)
             {
-                handle.ptr += handleIncrement;
-                D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[i].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, sizeof(buffersWithSize[i].second)) };
-                device->CreateConstantBufferView(&cbvDesc, handle);
+                // We follow CBV-UAV-SRV creation order
+                if (!isUAV[i])
+                {
+                    // Increase handler pointer only after creation of any SRV
+                    if (firstPassed) {
+                        handle.ptr += handleIncrement;
+                    }
+
+                    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[i].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, buffersWithSize[i].second) };
+                    device->CreateConstantBufferView(&cbvDesc, handle);
+                    firstPassed = true;
+                }
             }
         }
 
@@ -216,6 +223,41 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
             {
                 handle.ptr += handleIncrement;
                 device->CreateUnorderedAccessView(tex.resource.Get(), nullptr, &tex.uavDesc, handle);
+            }
+        }
+        // Create buffer UAVs from CBuffers
+        for (int i = 0; i < buffersWithSize.size(); ++i)
+        {
+            if (isUAV[i])
+            {
+                handle.ptr += handleIncrement;
+                //D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+                //uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+                //uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+                //uavDesc.Buffer.FirstElement = 0;
+                //uavDesc.Buffer.NumElements = 2;
+                //uavDesc.Buffer.StructureByteStride = sizeof(buffersWithSize[i].first);
+                //uavDesc.Buffer.CounterOffsetInBytes = 0;
+                //uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+                
+                UINT64 size = buffersWithSize[i].second;
+                UINT64 bufferSize = size;
+                auto uavDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+                auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+
+                ThrowIfFailed(device->CreateCommittedResource(
+                    &defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&buffersWithSize[i].first)
+                ));
+
+                D3D12_UNORDERED_ACCESS_VIEW_DESC uavViewDesc = {};
+                uavViewDesc.Buffer.NumElements = 1;
+                uavViewDesc.Buffer.FirstElement = 0;
+                uavViewDesc.Buffer.StructureByteStride = size;
+                uavViewDesc.Buffer.CounterOffsetInBytes = 0;
+                uavViewDesc.Format = DXGI_FORMAT_UNKNOWN;
+                uavViewDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+
+                device->CreateUnorderedAccessView(buffersWithSize[i].first.Get(), nullptr, &uavViewDesc, handle);
             }
         }
 

@@ -2,6 +2,7 @@
 #define _COMMON_HLSL
 
 #include "RT_HelperFunctions.hlsl"
+#include "ALL_CommonBuffers.hlsl"
 
 // Structures
 struct Vertex
@@ -25,25 +26,9 @@ struct Attributes
 };
 ////
 
-// Constant Buffers
-struct SceneConstantBuffer
-{
-	matrix projectionToWorld;
-	float4 cameraPosition;
-	float4 lightPosition;
-	float4 lightAmbientColor;
-	float4 lightDiffuseColor;
-};
-////
-struct CubeConstantBuffer
-{
-	float3 albedo;
-	int frameCount;
-};
-
 // Resources
 ConstantBuffer<SceneConstantBuffer> g_sceneCB : register(b0);
-ConstantBuffer<CubeConstantBuffer> g_cubeCB : register(b1);
+ConstantBuffer<CameraConstantBuffer> g_cameraCB : register(b1);
 
 RWTexture2D<float4> RTOutputNormal				  : register(u0);
 RWTexture2D<float4> RTOutputPosition			  : register(u1);
@@ -95,23 +80,6 @@ uint3 Load3x16BitIndices(uint offsetBytes)
 	}
 
 	return indices_;
-}
-
-// Generate a ray in world space for a camera pixel corresponding to an index from the dispatched 2D grid.
-inline void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
-{
-	float2 xy = index + float2(0.5f, 0.5f); // center in the middle of the pixel.
-	float2 screenPos = xy / DispatchRaysDimensions().xy * 2.0 - 1.0;
-
-    // Invert Y for DirectX-style coordinates.
-	screenPos.y = -screenPos.y;
-
-    // Unproject the pixel coordinate into a ray.
-	float4 world = mul(float4(screenPos, 0, 1), g_sceneCB.projectionToWorld);
-
-	world.xyz /= world.w;
-	origin = g_sceneCB.cameraPosition.xyz;
-	direction = normalize(world.xyz - origin);
 }
 
 // Get hit position in world-space

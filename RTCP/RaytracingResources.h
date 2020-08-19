@@ -39,7 +39,7 @@ public:
 	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, LPCWSTR rayGenName, LPCWSTR missName, LPCWSTR hitName, LPCWSTR hitGroupName, LPCWSTR rayGenNameExport = L"RayGen", LPCWSTR missNameExport = L"Miss", LPCWSTR hitNameExport = L"Hit");
 	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName);
 
-    void CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector< ResourceWithSize> buffersWithSize, size_t maxPayloadSize);
+    void CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector< ResourceWithSize> buffersWithSize, std::vector<bool> isUAV, size_t maxPayloadSize);
 	ComPtr<ID3D12DescriptorHeap> GetDescriptorHeap() const { return m_descriptorHeap; };
 	ComPtr<ID3D12Resource> GetShaderTable() const { return m_shaderTable; };
 	uint32_t GetShaderTableRecordSize() const { return m_shaderTableRecordSize; };
@@ -51,7 +51,7 @@ private:
 	void CreateTLAS(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, UINT tlasFlags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
 
 	// Called through CreateRaytracingPipeline
-	void CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector< ResourceWithSize> buffersWithSize);
+	void CreateDxrPipelineAssets(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector<ResourceWithSize> buffersWithSize, std::vector<bool> isUAV);
 	void CreateShaderTable(ID3D12Device5* device);
 	void CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSize);
 
@@ -79,19 +79,19 @@ private:
 #endif // !_RAYTRACING_RESOURCES_H_
 
 template<typename T1, typename T2, typename T3>
-inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, size_t maxPayloadSize = sizeof(float) * 4)
+inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, std::array<bool, 3> isUAV = {}, size_t maxPayloadSize = sizeof(float) * 4)
 {
-	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, cb3, maxPayloadSize);
-}
+	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, cb3, isUAV, maxPayloadSize);
+};
 
 template<typename T1, typename T2>
-inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, size_t maxPayloadSize = sizeof(float) * 4)
+inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, std::array<bool, 2> isUAV = {}, size_t maxPayloadSize = sizeof(float) * 4)
 {
-	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, maxPayloadSize);
+	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, isUAV, maxPayloadSize);
 }
 
 template <typename T1, typename T2>
-inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, size_t maxPayloadSize)
+inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, std::array<bool, 2> isUAV, size_t maxPayloadSize)
 {
     // Create view buffer and material buffer
     {
@@ -103,11 +103,11 @@ inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12
 	v.push_back({ cb1.resource, sizeof(cb1.value) });
 	v.push_back({ cb2.resource, sizeof(cb2.value) });
 
-	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v, maxPayloadSize);
+	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v, std::vector<bool>{isUAV.begin(), isUAV.end()}, maxPayloadSize);
 }
 
 template <typename T1, typename T2, typename T3>
-inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, size_t maxPayloadSize)
+inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, std::array<bool, 3> isUAV, size_t maxPayloadSize)
 {
 	// Create view buffer and material buffer
 	{
@@ -121,5 +121,5 @@ inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12
 	v.push_back({ cb2.resource, sizeof(cb2.value) });
 	v.push_back({ cb3.resource, sizeof(cb3.value) });
 
-	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v, maxPayloadSize);
+	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v, std::vector<bool>{isUAV.begin(), isUAV.end()}, maxPayloadSize);
 }

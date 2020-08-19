@@ -25,7 +25,7 @@ void ClosestHit(inout RayPayload payload, in Attributes attrib)
 	};
 	
 	float3 triangleNormal = HitAttribute(vertexNormals, attrib);
-		
+	
 	//float4 diffuseColor = CalculateDiffuseLighting(hitPosition, triangleNormal);
 	//float4 color = g_sceneCB.lightAmbientColor + diffuseColor;
 	

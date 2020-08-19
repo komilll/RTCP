@@ -89,6 +89,7 @@ private:
 	// Main function, invoked to prepare DXR pipeline
 	void PrepareRaytracingResources();
 	void PrepareRaytracingResourcesAO();
+	void PrepareRaytracingResourcesLambert();
 
 	//// Functions called by PrepareRaytracingResources()
 	//void CreateBLAS(std::shared_ptr<ModelClass> model, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& blasScratch, ComPtr<ID3D12Resource>& blasResult, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
@@ -175,9 +176,8 @@ private:
 
 	// Constant buffers
 	CBuffer<SceneConstantBuffer> m_sceneBuffer;
-	CBuffer<CubeConstantBuffer> m_cubeBuffer;
+	CBuffer<CameraConstantBuffer> m_cameraBuffer;
 	CBuffer<AoConstantBuffer> m_aoBuffer;
-	CBuffer<UberBufferStruct> m_uberBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBufferSkybox;
 
@@ -196,11 +196,13 @@ private:
 	// Raytracing - resources containing all data for single raytracing shaders group
 	std::shared_ptr<RaytracingResources> m_raytracingNormal = NULL;
 	std::shared_ptr<RaytracingResources> m_raytracingAO = NULL;
+	std::shared_ptr<RaytracingResources> m_raytracingLambert = NULL;
 
 	// DXR - output texture and descriptor heap of resources
 	ComPtr<ID3D12Resource> m_rtPositionTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtNormalTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtAoTexture = NULL;
+	ComPtr<ID3D12Resource> m_rtLambertTexture = NULL;
 
 	// Shader compiler
 	D3D12ShaderCompilerInfo m_shaderCompiler{};

@@ -21,7 +21,7 @@ Renderer::Renderer(std::shared_ptr<DeviceManager> deviceManager, HWND hwnd)
     m_scissorRect.right = static_cast<LONG>(m_windowWidth);
     m_scissorRect.bottom = static_cast<LONG>(m_windowHeight);
 
-    m_cameraPosition = XMFLOAT3{ 15.0f, 3.5f, -25.0f };
+    m_cameraPosition = XMFLOAT3{ 15.0f, 3.5f, -15.0f };
     m_cameraRotation = XMFLOAT3{ 0,0,0 };
     CreateViewAndPerspective();
 }
@@ -68,24 +68,16 @@ void Renderer::OnUpdate()
         m_constantBufferSkybox.value.world = XMMatrixMultiply(m_constantBufferSkybox.value.world, XMMatrixTranslation(pos.x, pos.y, pos.z));
         m_constantBufferSkybox.value.world = XMMatrixTranspose(m_constantBufferSkybox.value.world);
         m_constantBufferSkybox.Update();
-
-        // Update - uber buffer
-        m_uberBuffer.value.viewPosition = m_cameraPosition;
-        m_uberBuffer.Update();
     }
     // Update raygeneration cbuffer - scene CB
     {
         XMMATRIX viewProj = XMMatrixMultiply(XMMatrixTranspose(m_constantBuffer.value.view), XMMatrixTranspose(m_constantBuffer.value.projection));
         m_sceneBuffer.value.projectionToWorld = XMMatrixTranspose(XMMatrixInverse(nullptr, viewProj));
+        m_sceneBuffer.value.frameCount++;
+        m_sceneBuffer.value.frameCount %= INT_MAX;
         m_sceneBuffer.Update();
     }
-    // Update raygeneration cbuffer - cube CB
-    {
-        m_cubeBuffer.value.frameCount++;
-        m_cubeBuffer.value.frameCount %= INT_MAX;
-        m_cubeBuffer.Update();
-    }
-    // Update ao cbuffer - ao CB
+    // Update ao cbuffer and camera cbuffer - ao CB/camera CB
     {        
         for (int i = 0; i < 4; ++i) 
         {
@@ -117,14 +109,14 @@ void Renderer::OnUpdate()
         {
             float x = (m_rngDist(m_rng) - 0.5f);// / static_cast<float>(m_windowWidth);
             float y = (m_rngDist(m_rng) - 0.5f);// / static_cast<float>(m_windowHeight);
-            m_aoBuffer.value.jitterCamera = { x, y };
+            m_cameraBuffer.value.jitterCamera = { x, y };
         }
         else
         {
-            m_aoBuffer.value.jitterCamera = { 0.5f, 0.5f };
+            m_cameraBuffer.value.jitterCamera = { 0.5f, 0.5f };
         }
 
-        m_aoBuffer.value.lensRadius = USE_AO_THIN_LENS ? m_aoBuffer.value.focalLength / (2.0f * m_aoBuffer.value.fNumber) : 0.0f;
+        m_cameraBuffer.value.lensRadius = USE_AO_THIN_LENS ? m_cameraBuffer.value.focalLength / (2.0f * m_cameraBuffer.value.fNumber) : 0.0f;
 
         constexpr float conv{ 0.0174532925f };
         const XMMATRIX rotationMatrix = XMMatrixRotationRollPitchYaw(m_cameraRotation.x * conv, m_cameraRotation.y * conv, m_cameraRotation.z * conv);
@@ -133,12 +125,13 @@ void Renderer::OnUpdate()
         const XMVECTOR camForward = XMVector3TransformCoord(XMVECTOR{ 0, 0, 1, 0 }, rotationMatrix);
         const XMVECTOR camUp = XMVector3Cross(camRight, camForward);
 
-        m_aoBuffer.value.cameraU = XMFLOAT4{ camRight.m128_f32[0], camRight.m128_f32[1], camRight.m128_f32[2], 1 };
-        m_aoBuffer.value.cameraV = XMFLOAT4{ camUp.m128_f32[0], camUp.m128_f32[1], camUp.m128_f32[2], 1 };
-        m_aoBuffer.value.cameraW = XMFLOAT4{ camForward.m128_f32[0], camForward.m128_f32[1], camForward.m128_f32[2], 1 };
+        m_cameraBuffer.value.cameraU = XMFLOAT4{ camRight.m128_f32[0], camRight.m128_f32[1], camRight.m128_f32[2], 1 };
+        m_cameraBuffer.value.cameraV = XMFLOAT4{ camUp.m128_f32[0], camUp.m128_f32[1], camUp.m128_f32[2], 1 };
+        m_cameraBuffer.value.cameraW = XMFLOAT4{ camForward.m128_f32[0], camForward.m128_f32[1], camForward.m128_f32[2], 1 };
 
         //m_aoBuffer.value.padding = {};
         m_aoBuffer.Update();
+        m_cameraBuffer.Update();
     }
 }
 
@@ -391,18 +384,10 @@ void Renderer::LoadAssets()
             &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(ConstantBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_constantBuffer.resource)
         ));
 
-        ThrowIfFailed(m_device->CreateCommittedResource(
-            &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(UberBufferStruct)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_uberBuffer.resource)
-        ));
-
         CD3DX12_RANGE readRange(0, 0);
         ThrowIfFailed(m_constantBuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&m_constantBuffer.ptr)));
         memcpy(m_constantBuffer.ptr, &m_constantBuffer.value, sizeof(ConstantBufferStruct));
         m_constantBuffer.resource->Unmap(0, &readRange);
-
-        ThrowIfFailed(m_uberBuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&m_uberBuffer.ptr)));
-        memcpy(m_uberBuffer.ptr, &m_uberBuffer.value, sizeof(UberBufferStruct));
-        m_uberBuffer.resource->Unmap(0, &readRange);
     }
 
     // Create the constant buffer - SKYBOX
@@ -449,6 +434,7 @@ void Renderer::LoadAssets()
     // Preparation of raytracing
     PrepareRaytracingResources();
     PrepareRaytracingResourcesAO();
+    PrepareRaytracingResourcesLambert();
 
     // Close the command list and execute it to begin the initial GPU setup.
     ThrowIfFailed(m_commandList->Close());
@@ -484,6 +470,7 @@ void Renderer::PopulateCommandList()
         // Wait for the transitions to complete
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
         // Set the UAV/SRV/CBV and sampler heaps
         ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingNormal->GetDescriptorHeap().Get() };
@@ -515,7 +502,6 @@ void Renderer::PopulateCommandList()
 
         /* RTAO NOISE ALGORITHM */
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-        //m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtPositionTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
          //Set the UAV/SRV/CBV and sampler heaps
         {
@@ -551,8 +537,42 @@ void Renderer::PopulateCommandList()
         m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtAoTexture.Get());
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
+        /* RTAO LAMBERT ALGORITHM */
+        //Set the UAV/SRV/CBV and sampler heaps
+        {
+            ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingLambert->GetDescriptorHeap().Get() };
+            m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+            ComPtr<ID3D12Resource> shaderTable = m_raytracingLambert->GetShaderTable();
+            uint32_t shaderTableRecordSize = m_raytracingLambert->GetShaderTableRecordSize();
+            ComPtr<ID3D12StateObject> rtpso = m_raytracingLambert->GetRTPSO();
+
+            // Dispatch rays
+            D3D12_DISPATCH_RAYS_DESC desc = {};
+            desc.RayGenerationShaderRecord.StartAddress = shaderTable->GetGPUVirtualAddress();
+            desc.RayGenerationShaderRecord.SizeInBytes = shaderTableRecordSize;
+
+            desc.MissShaderTable.StartAddress = shaderTable->GetGPUVirtualAddress() + shaderTableRecordSize;
+            desc.MissShaderTable.SizeInBytes = shaderTableRecordSize;		// Only a single Miss program entry
+            desc.MissShaderTable.StrideInBytes = shaderTableRecordSize;
+
+            desc.HitGroupTable.StartAddress = shaderTable->GetGPUVirtualAddress() + (shaderTableRecordSize * 2);
+            desc.HitGroupTable.SizeInBytes = shaderTableRecordSize;			// Only a single Hit program entry
+            desc.HitGroupTable.StrideInBytes = shaderTableRecordSize;
+
+            desc.Width = m_windowWidth;
+            desc.Height = m_windowHeight;
+            desc.Depth = 1;
+
+            m_commandList->SetPipelineState1(rtpso.Get());
+            m_commandList->DispatchRays(&desc);
+        }
+        //// Transition DXR output to a copy source
+        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+        m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtLambertTexture.Get());
+        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-        //m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtPositionTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));        
     }
     else
     {
@@ -602,7 +622,6 @@ void Renderer::PopulateCommandList()
         m_commandListSkybox->SetGraphicsRootDescriptorTable(0, srvHandle1);
 
         m_commandListSkybox->SetGraphicsRootConstantBufferView(1, m_constantBufferSkybox.resource->GetGPUVirtualAddress());
-        m_commandListSkybox->SetGraphicsRootConstantBufferView(2, m_uberBuffer.resource->GetGPUVirtualAddress());
 
         m_commandListSkybox->RSSetViewports(1, &m_viewport);
         m_commandListSkybox->RSSetScissorRects(1, &m_scissorRect);
@@ -947,7 +966,7 @@ void Renderer::CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr
 
 void Renderer::PrepareRaytracingResources()
 {
-    const std::shared_ptr<ModelClass> model = m_modelSphere;
+    const std::shared_ptr<ModelClass> model = m_modelBuddha;
 
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
@@ -958,24 +977,22 @@ void Renderer::PrepareRaytracingResources()
     m_raytracingNormal = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"HitGroup"));
 
     std::vector<TextureWithDesc> textures{};
-    CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     CreateTexture2D(m_rtPositionTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
     textures.push_back({ TextureWithDesc{m_rtPositionTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
 
-    CreateRaytracingPipeline(m_raytracingNormal.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, sizeof(XMFLOAT4) * 2);
+    CreateRaytracingPipeline(m_raytracingNormal.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, { }, sizeof(XMFLOAT4) * 2);
 }
 
 void Renderer::PrepareRaytracingResourcesAO()
 {
-    const std::shared_ptr<ModelClass> model = m_modelSphere;
+    const std::shared_ptr<ModelClass> model = m_modelBuddha;
 
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
-    std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
-    samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", 3, 1, 5, samplers, L"RayGen_AO");
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", 3, 1, 5, {}, L"RayGen_AO");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"Miss_AO");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"ClosestHit_AO");
     //CreateAnyHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"AnyHit_AO");
@@ -986,11 +1003,39 @@ void Renderer::PrepareRaytracingResourcesAO()
     textures.push_back({ TextureWithDesc{m_rtAoTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+    D3D12_SHADER_RESOURCE_VIEW_DESC normalDesc = { DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
     srvDesc.Texture2D.MipLevels = 1;
-    textures.push_back({ TextureWithDesc{m_rtNormalTexture, srvDesc } });
+    normalDesc.Texture2D.MipLevels = 1;
+    textures.push_back({ TextureWithDesc{m_rtNormalTexture, normalDesc } });
     textures.push_back({ TextureWithDesc{m_texture, srvDesc } });
 
-    CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cubeBuffer, m_aoBuffer, sizeof(XMFLOAT4) * 2);
+    CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_aoBuffer, {}, sizeof(XMFLOAT4) * 2);
+}
+
+void Renderer::PrepareRaytracingResourcesLambert()
+{
+    const std::shared_ptr<ModelClass> model = m_modelBuddha;
+
+    RtProgram rayGenShader, missShader;
+    HitProgram hitShader;
+
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 2, 1, 5, {}, L"RayGen_Lambert");
+    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"Miss_Lambert");
+    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHit_Lambert");
+    m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"GroupLambert"));
+
+    std::vector<TextureWithDesc> textures{};
+    CreateTexture2D(m_rtLambertTexture, m_windowWidth, m_windowHeight);
+    textures.push_back({ TextureWithDesc{m_rtLambertTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+    D3D12_SHADER_RESOURCE_VIEW_DESC normalDesc = { DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+    srvDesc.Texture2D.MipLevels = 1;
+    normalDesc.Texture2D.MipLevels = 1;
+    textures.push_back({ TextureWithDesc{m_rtNormalTexture, normalDesc } });
+    textures.push_back({ TextureWithDesc{m_texture, srvDesc } });
+
+    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
@@ -1129,6 +1174,4 @@ void Renderer::InitializeRaytracingBufferValues()
     m_sceneBuffer.value.lightPosition = XMFLOAT4(0.0f, 1.8f, -3.0f, 0.0f);
     m_sceneBuffer.value.lightAmbientColor = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
     m_sceneBuffer.value.lightDiffuseColor = XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f);
-
-    m_cubeBuffer.value.albedo = XMFLOAT3{ 0.5f, 0, 0 };
 }
