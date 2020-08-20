@@ -19,22 +19,26 @@ void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device, DXGI_
 	assert(scene);
 #pragma warning(push)
 #pragma warning(disable : 6011)
-	ProcessNode(scene->mRootNode, scene);
+	//ProcessNode(scene->mRootNode, scene);
+	for (unsigned int i = 0; i < scene->mNumMeshes; i++) 
+	{
+		m_meshes.push_back(ProcessMesh(scene->mMeshes[i], scene));
+	}
 #pragma warning(pop)
 	assert(PrepareBuffers(device, indexFormat) && "Failed to prepare buffers");
 }
 
-void ModelClass::ProcessNode(aiNode* node, const aiScene* scene)
+void ModelClass::ProcessNode(std::vector<Mesh>& meshes, aiNode* node, const aiScene* scene)
 {
 	for (unsigned int i = 0; i < node->mNumMeshes; ++i)
 	{
 		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-		m_meshes.push_back(ProcessMesh(mesh, scene));
+		meshes.push_back(ProcessMesh(mesh, scene));
 	}
 
 	for (unsigned int i = 0; i < node->mNumChildren; ++i)
 	{
-		ProcessNode(node->mChildren[i], scene);
+		ProcessNode(meshes, node->mChildren[i], scene);
 	}
 }
 
@@ -194,11 +198,27 @@ bool ModelClass::CreateRectangle(ComPtr<ID3D12Device2> device, float left, float
 
 bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexFormat)
 {
-	Mesh mesh = GetMesh(0);
+	//std::vector<ModelClass::VertexBufferStruct> vertices = GetMesh(10).vertices;
+	//std::vector<unsigned long> indices = GetMesh(10).indices;
+
+	std::vector<ModelClass::VertexBufferStruct> vertices{};
+	std::vector<unsigned long> indices{};
+
+	for (Mesh mesh : m_meshes)
+	{
+		std::copy(mesh.vertices.begin(), mesh.vertices.end(), back_inserter(vertices));
+		//std::copy(mesh.indices.begin(), mesh.indices.end(), back_inserter(indices));
+		unsigned long count = static_cast<unsigned long>(indices.size());
+		for (unsigned long i : mesh.indices)
+		{
+			indices.push_back(i + count);
+		}
+	}
 
 	// Create vertex buffer
 	{
-		const UINT vertexBufferSize = static_cast<UINT>(sizeof(ModelClass::VertexBufferStruct)) * static_cast<UINT>(mesh.vertices.size());
+		const UINT vertexBufferSize = static_cast<UINT>(sizeof(ModelClass::VertexBufferStruct) * static_cast<UINT>(vertices.size()));
+		m_verticesCount = static_cast<UINT>(vertices.size());
 
 		ThrowIfFailed(device->CreateCommittedResource(
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
@@ -212,7 +232,7 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexF
 		UINT8* pVertexDataBegin;
 		CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
 		ThrowIfFailed(m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
-		memcpy(pVertexDataBegin, &mesh.vertices[0], vertexBufferSize);
+		memcpy(pVertexDataBegin, &vertices[0], vertexBufferSize);
 		m_vertexBuffer->Unmap(0, nullptr);
 
 		// Initialize the vertex buffer view.
@@ -236,8 +256,8 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexF
 			return false;
 		}
 
-		const UINT indexBufferSize = static_cast<UINT>(mesh.indices.size()) * indicesByteMultiplier;
-		m_indicesCount = static_cast<UINT>(mesh.indices.size());
+		const UINT indexBufferSize = static_cast<UINT>(indices.size()) * indicesByteMultiplier;
+		m_indicesCount = static_cast<UINT>(indices.size());
 
 		ThrowIfFailed(device->CreateCommittedResource(
 			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
@@ -251,7 +271,7 @@ bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexF
 		UINT8* pIndexDataBegin;
 		CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
 		ThrowIfFailed(m_indexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin)));
-		memcpy(pIndexDataBegin, &mesh.indices[0], indexBufferSize);
+		memcpy(pIndexDataBegin, &indices[0], indexBufferSize);
 		m_indexBuffer->Unmap(0, nullptr);
 
 		// Initialize the vertex buffer view.

@@ -48,7 +48,13 @@ void RayGen()
 	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
 	float3 primaryRayDirection;
 	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection);
+	
 	float3 pixelWorldSpacePosition = primaryRayOrigin + (primaryRayDirection * normalAndDepth.w);
+	if (normalAndDepth.w == 0)
+	{
+		RTOutput[LaunchIndex] = float4(0, 0, 0, 1.0f);
+		return;
+	}
 	
 	float3 shadeColor = albedo.xyz;
 	// Lambert lighting
@@ -59,30 +65,29 @@ void RayGen()
 		toLight = normalize(toLight);
 		float NoL = saturate(dot(normalAndDepth.xyz, toLight));
 	
-		RayDesc visRay = { pixelWorldSpacePosition, 1e-4f, primaryRayDirection, 1e+38f };
+		RayDesc visRay = { pixelWorldSpacePosition, 1e-4f, toLight, distToLight };
 		RayPayload payload;
 		payload.vis = 0.0f;
-		TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, visRay, payload);
+		TraceRay(SceneBVH, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 0, 1, 0, visRay, payload);
 	
 		float visibility = payload.vis;
 		
-		shadeColor += visibility * NoL * 1.0f; // * lightIntensity
+		shadeColor += visibility * NoL * lightColor;
 	}
 	shadeColor *= albedo.rgb / PI;
-	
 	RTOutput[LaunchIndex] = float4(shadeColor, 1.0f);
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload : SV_RayPayload)
 {
-	//payload.vis = 1.0f;
+	payload.vis = 1.0f;
 }
 
 [shader("closesthit")]
 void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-
+	
 }
 
 #endif //_RT_LAMBERTIAN_HLSL_

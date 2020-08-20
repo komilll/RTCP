@@ -16,14 +16,10 @@ struct Vertex
 
 struct RayPayload
 {
-	float4 worldPos;
+	float4 albedo;
 	float4 normalWithDepth;
 };
 
-struct Attributes 
-{
-	float2 bary;
-};
 ////
 
 // Resources
@@ -31,19 +27,22 @@ ConstantBuffer<SceneConstantBuffer> g_sceneCB : register(b0);
 ConstantBuffer<CameraConstantBuffer> g_cameraCB : register(b1);
 
 RWTexture2D<float4> RTOutputNormal				  : register(u0);
-RWTexture2D<float4> RTOutputPosition			  : register(u1);
+RWTexture2D<float4> RTOutputAlbedo   			  : register(u1);
 
 RaytracingAccelerationStructure SceneBVH      : register(t0);
 ByteAddressBuffer indices					  : register(t1);
 StructuredBuffer<Vertex> vertices			  : register(t2);
+Texture2D<float4> albedoTex					  : register(t3);
+
+SamplerState g_sampler : register(s0);
 ////
 
 // Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
-float3 HitAttribute(float3 vertexAttribute[3], Attributes attrib)
+float3 HitAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attrib)
 {
 	return vertexAttribute[0] +
-        attrib.bary.x * (vertexAttribute[1] - vertexAttribute[0]) +
-        attrib.bary.y * (vertexAttribute[2] - vertexAttribute[0]);
+        attrib.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
+        attrib.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
 }
 
 uint3 Load3x32BitIndices(uint offsetBytes)

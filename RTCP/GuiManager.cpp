@@ -11,7 +11,7 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
 
     {
         ImGui::Begin("Hello, world!");
-        if (ImGui::SliderFloat("AO Radius", &m_renderer->m_aoBuffer.value.aoRadius, 0.0f, 15.0f, "%.2f")) {
+        if (ImGui::SliderFloat("AO Radius", &m_renderer->m_aoBuffer.value.aoRadius, 0.0f, 50.0f, "%.2f")) {
             m_renderer->m_resetFrameAO = true;
         }
         if (ImGui::SliderFloat("AO Min T", &m_renderer->m_aoBuffer.value.minT, 1e-10f, 1e-1f, "%.4f")) {
@@ -30,6 +30,14 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
         if (ImGui::SliderFloat("AO Focal length", &m_renderer->m_cameraBuffer.value.focalLength, 1e-4f, 10.0f, "%.2f")) {
             m_renderer->m_resetFrameAO = true;
         }
+
+        // Camera position/rotation
+        char camPosText[100];
+        char camRotText[100];
+        sprintf_s(camPosText, "Current cam pos: (%.1f, %.1f, %.1f)", m_renderer->m_cameraPosition.x, m_renderer->m_cameraPosition.y, m_renderer->m_cameraPosition.z);
+        sprintf_s(camRotText, "Current cam rot: (%.1f, %.1f, %.1f)", m_renderer->m_cameraRotation.x, m_renderer->m_cameraRotation.y, m_renderer->m_cameraRotation.z);
+        ImGui::Text(camPosText);
+        ImGui::Text(camRotText);
         ImGui::End();
     }
 

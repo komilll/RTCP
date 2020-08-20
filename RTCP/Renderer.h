@@ -87,9 +87,9 @@ private:
 
 #pragma region Raytracing functions
 	// Main function, invoked to prepare DXR pipeline
-	void PrepareRaytracingResources();
-	void PrepareRaytracingResourcesAO();
-	void PrepareRaytracingResourcesLambert();
+	void PrepareRaytracingResources(const std::shared_ptr<ModelClass> model);
+	void PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> model);
+	void PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClass> model);
 
 	//// Functions called by PrepareRaytracingResources()
 	//void CreateBLAS(std::shared_ptr<ModelClass> model, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& blasScratch, ComPtr<ID3D12Resource>& blasResult, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
@@ -183,13 +183,14 @@ private:
 
 	// Textures
 	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
-	ComPtr<ID3D12Resource> m_texture;
+	ComPtr<ID3D12Resource> m_pebblesTexture;
 	ComPtr<ID3D12Resource> m_skyboxTexture;
 
 	// Models
 	std::shared_ptr<ModelClass> m_modelCube = NULL;
 	std::shared_ptr<ModelClass> m_modelSphere = NULL;
 	std::shared_ptr<ModelClass> m_modelBuddha = NULL;
+	std::shared_ptr<ModelClass> m_modelPinkRoom = NULL;
 #pragma endregion
 	
 #pragma region Raytracing variables
@@ -199,7 +200,7 @@ private:
 	std::shared_ptr<RaytracingResources> m_raytracingLambert = NULL;
 
 	// DXR - output texture and descriptor heap of resources
-	ComPtr<ID3D12Resource> m_rtPositionTexture = NULL;
+	ComPtr<ID3D12Resource> m_rtAlbedoTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtNormalTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtAoTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtLambertTexture = NULL;

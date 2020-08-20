@@ -91,7 +91,8 @@ void RayGen()
 	// Figure out pixel world space position (using length of a primary ray found in previous pass)
 	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
 	float3 primaryRayDirection;
-	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection, g_sceneCB, g_cameraCB);
+	//GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection, g_sceneCB, g_cameraCB);
+	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection);
 	
 	// Calculate direction of raytracing for AO sample
 	float3 pixelWorldSpacePosition = primaryRayOrigin + (primaryRayDirection * normalAndDepth.w);
@@ -112,26 +113,12 @@ void RayGen()
 	float prevAO = RTOutput[LaunchIndex].x;
 	ao = ((float) g_aoCB.accFrames * prevAO + ao) / ((float) g_aoCB.accFrames + 1.0f);
 	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, 1.0f); //< Replace all cached AO with current result
-	
-	//// Lambert lighting
-	//float3 lightColor = g_sceneCB.lightDiffuseColor.rgb;
-	//float3 toLight = g_sceneCB.lightPosition.xyz - pixelWorldSpacePosition;
-	//float distToLight = length(toLight);
-	//toLight = normalize(toLight);
-
-	//float NoL = saturate(dot(payload.normal, toLight));
-	//float visibility = 
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload : SV_RayPayload)
 {
 	// Empty
-}
-
-uint3 Load3x32BitIndices(uint offsetBytes)
-{
-	return indices.Load3(offsetBytes);
 }
 
 // Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
@@ -152,27 +139,7 @@ float2 HitAttribute(float2 vertexAttribute[3], BuiltInTriangleIntersectionAttrib
 [shader("closesthit")]
 void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	//float3 barycentrics = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 	payload.T = RayTCurrent();
-	
-	//uint indexSizeInBytes = 4;
-	//uint indicesPerTriangle = 3;
-	//uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-	//uint baseIndex = PrimitiveIndex() * triangleIndexStride;
-	
-	//const uint3 indices_ = Load3x32BitIndices(baseIndex);
-	
-	//float2 vertexUVs[3] =
-	//{
-	//	vertices[indices_[0]].uv,
-	//	vertices[indices_[1]].uv,
-	//	vertices[indices_[2]].uv
-	//};
-	
-	//float2 uv = HitAttribute(vertexUVs, attribs);
-	//uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
-	
-	//payload.albedo = albedoTexture.SampleLevel(g_sampler, uv, 0).rgb;
 }
 
 #endif //_RT_AO_HLSL_

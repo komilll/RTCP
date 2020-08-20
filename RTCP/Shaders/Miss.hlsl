@@ -8,7 +8,7 @@
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-	payload.worldPos = float4(0, 0, 0, 0);
+	payload.albedo = float4(0, 0, 0, 0);
 	payload.normalWithDepth = float4(0, 0, 0, 0);
 }
 

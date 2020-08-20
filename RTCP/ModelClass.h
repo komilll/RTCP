@@ -78,11 +78,12 @@ public:
 	D3D12_INDEX_BUFFER_VIEW GetIndexBufferView() const { return m_indexBufferView; }
 	ComPtr<ID3D12Resource> GetIndexBuffer() const { return m_indexBuffer; }
 	int GetIndicesCount() const { return m_indicesCount; }
+	int GetVerticesCount() const { return m_verticesCount; }
 
 private:
 	// Processing data by assimp
-	void ProcessNode(aiNode* node, const aiScene* scene);
-	Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene);
+	static void ProcessNode(std::vector<Mesh>& meshes, aiNode* node, const aiScene* scene);
+	static Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene);
 
 	// Internal functions - creating shapes
 	bool CreateRectangle(ComPtr<ID3D12Device2> device, float left, float right, float top, float bottom);
@@ -102,4 +103,5 @@ private:
 	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
 
 	int m_indicesCount = 0;
+	int m_verticesCount = 0;
 };

@@ -209,7 +209,7 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
                         handle.ptr += handleIncrement;
                     }
 
-                    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[i].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, buffersWithSize[i].second) };
+                    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[i].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, static_cast<UINT>(buffersWithSize[i].second)) };
                     device->CreateConstantBufferView(&cbvDesc, handle);
                     firstPassed = true;
                 }
@@ -240,7 +240,7 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
                 //uavDesc.Buffer.CounterOffsetInBytes = 0;
                 //uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
                 
-                UINT64 size = buffersWithSize[i].second;
+                UINT size = static_cast<UINT>(buffersWithSize[i].second);
                 UINT64 bufferSize = size;
                 auto uavDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
                 auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
@@ -272,11 +272,11 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
 
         // Create the index buffer SRV
         handle.ptr += handleIncrement;
-        device->CreateShaderResourceView(model->GetIndexBuffer().Get(), &indexDesc, handle);
+        device->CreateShaderResourceView(indexDesc.Buffer.NumElements == 0 ? nullptr : model->GetIndexBuffer().Get(), &indexDesc, handle);
 
         // Create the vertex buffer SRV
         handle.ptr += handleIncrement;
-        device->CreateShaderResourceView(model->GetVertexBuffer().Get(), &vertexDesc, handle);
+        device->CreateShaderResourceView(vertexDesc.Buffer.NumElements == 0 ? nullptr : model->GetVertexBuffer().Get(), &vertexDesc, handle);
 
         // Create texture buffer SRV
         for (auto& tex : texturesWithDesc)
