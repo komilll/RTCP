@@ -1,10 +1,7 @@
-//#include <All_UberBuffer.hlsl>
+#ifndef _PS_SKYBOX_HLSL_
+#define _PS_SKYBOX_HLSL_
 
-cbuffer UberBuffer : register(b0)
-{
-	float3 g_viewerPosition;
-	float g_uberPad;
-};
+#include "ALL_CommonBuffers.hlsl"
 
 struct PixelInputType
 {
@@ -12,12 +9,14 @@ struct PixelInputType
 	float3 positionWS : TEXCOORD0;
 };
 
+ConstantBuffer<SceneConstantBuffer> g_sceneCB : register(b0);
 SamplerState baseSampler : register(s0);
 TextureCube<float4> skyboxTexture : register(t0);
 
 float4 main(PixelInputType input) : SV_TARGET
 {
-	//return float4(g_viewerPosition, 1.0f);
     //return float4(normalize(g_viewerPosition.xyz - input.positionWS) * float3(1, 1, -1), 1.0f);
-	return skyboxTexture.Sample(baseSampler, normalize(input.positionWS - g_viewerPosition.xyz) * float3(1, 1, -1));
+	return skyboxTexture.Sample(baseSampler, normalize(input.positionWS - g_sceneCB.cameraPosition.xyz) * float3(1, 1, -1));
 }
+
+#endif // _PS_SKYBOX_HLSL_

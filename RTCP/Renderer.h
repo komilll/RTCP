@@ -14,7 +14,7 @@
 #include "RaytracingResources.h"
 
 using namespace DirectX;
-typedef std::array<D3D12_INPUT_ELEMENT_DESC, 5> BasicInputLayout;
+typedef std::array<D3D12_INPUT_ELEMENT_DESC, 6> BasicInputLayout;
 
 // DEFINES
 #define ROOT_SIGNATURE_PIXEL D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;// | //D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
@@ -84,6 +84,7 @@ private:
 	void InitShaderCompiler(D3D12ShaderCompilerInfo& shaderCompiler) const;
 	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, D3D12ShaderInfo& info, IDxcBlob** blob) const;
 	void Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, RtProgram& program) const;
+	void Compile_Shader(_In_ LPCWSTR pFileName, _In_reads_opt_(_Inexpressible_(pDefines->Name != NULL)) CONST D3D_SHADER_MACRO* pDefines, _In_opt_ ID3DInclude* pInclude, _In_ LPCSTR pEntrypoint, _In_ LPCSTR pTarget, _In_ UINT Flags1, _In_ UINT Flags2, _Out_ ID3DBlob** ppCode) const;
 
 #pragma region Raytracing functions
 	// Main function, invoked to prepare DXR pipeline

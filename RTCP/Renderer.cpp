@@ -1,7 +1,6 @@
 #include "Renderer.h"
 #include <WICTextureLoader.h>
 #include <DDSTextureLoader.h>
-#include <ResourceUploadBatch.h>
 #include <DirectXHelpers.h>
 #include <DirectXTex.h>
 #include <SimpleMath.h>
@@ -347,8 +346,8 @@ void Renderer::LoadAssets()
         // Prepare shaders
         ComPtr<ID3DBlob> vertexShader;
         ComPtr<ID3DBlob> pixelShader;
-        ThrowIfFailed(D3DCompileFromFile(L"Shaders/VS_Skybox.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "vs_5_0", 0, 0, &vertexShader, nullptr));
-        ThrowIfFailed(D3DCompileFromFile(L"Shaders/PS_Skybox.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "ps_5_0", 0, 0, &pixelShader, nullptr));
+        Compile_Shader(L"Shaders/VS_Skybox.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "vs_5_1", 0, 0, &vertexShader);
+        Compile_Shader(L"Shaders/PS_Skybox.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "ps_5_1", 0, 0, &pixelShader);
 
         // Preprare layout, DSV and create PSO
         auto inputElementDescs = CreateBasicInputLayout();
@@ -367,10 +366,10 @@ void Renderer::LoadAssets()
 
     // Create the vertex buffer.
     {
-        //m_modelCube = std::shared_ptr<ModelClass>(new ModelClass("cube.obj", m_device));
-        //m_modelSphere = std::shared_ptr<ModelClass>(new ModelClass("sphere.obj", m_device));
-        //m_modelBuddha = std::shared_ptr<ModelClass>(new ModelClass("happy-buddha.fbx", m_device));
-        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("pink_room.fbx", m_device));
+        m_modelCube = std::shared_ptr<ModelClass>(new ModelClass("cube.obj", m_device, m_commandList));
+        m_modelSphere = std::shared_ptr<ModelClass>(new ModelClass("sphere.obj", m_device, m_commandList));
+        //m_modelBuddha = std::shared_ptr<ModelClass>(new ModelClass("happy-buddha.fbx", m_device, m_commandList));
+        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("pink_room.fbx", m_device, m_commandList));
     }
 
     // Fill structure data
@@ -422,7 +421,7 @@ void Renderer::LoadAssets()
     // Create texture for rasterized object
     {
         CreateTextureFromFileRTCP(m_pebblesTexture, m_commandList, L"Pebles.png", uploadHeap, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        //CreateSRV_Texture2D(m_texture, m_srvHeap.Get(), 0, m_device.Get());
+        CreateSRV_Texture2D(m_modelPinkRoom->GetTextureResource(1), m_srvHeap.Get(), 0, m_device.Get());
     }
 
     ComPtr<ID3D12Resource> skyboxUploadHeap;
@@ -608,8 +607,8 @@ void Renderer::PopulateCommandList()
         m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
         m_commandList->ClearDepthStencilView(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
         m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        m_commandList->IASetVertexBuffers(0, 1, &m_modelSphere->GetVertexBufferView());
-        m_commandList->DrawInstanced(m_modelSphere->GetIndicesCount(), 1, 0, 0);
+        m_commandList->IASetVertexBuffers(0, 1, &m_modelPinkRoom->GetVertexBufferView());
+        m_commandList->DrawInstanced(m_modelPinkRoom->GetIndicesCount(), 1, 0, 0);
 
         // Indicate that the back buffer will now be used to present.
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
@@ -624,6 +623,7 @@ void Renderer::PopulateCommandList()
         m_commandListSkybox->SetGraphicsRootDescriptorTable(0, srvHandle1);
 
         m_commandListSkybox->SetGraphicsRootConstantBufferView(1, m_constantBufferSkybox.resource->GetGPUVirtualAddress());
+        m_commandListSkybox->SetGraphicsRootConstantBufferView(2, m_sceneBuffer.resource->GetGPUVirtualAddress());
 
         m_commandListSkybox->RSSetViewports(1, &m_viewport);
         m_commandListSkybox->RSSetScissorRects(1, &m_scissorRect);
@@ -891,7 +891,8 @@ BasicInputLayout Renderer::CreateBasicInputLayout()
         { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         { "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         { "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 36, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        { "TEXCOORD", 1, DXGI_FORMAT_R32_UINT, 0, 56, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
     };
 
     BasicInputLayout arr;
@@ -1174,6 +1175,20 @@ void Renderer::Compile_Shader(D3D12ShaderCompilerInfo& compilerInfo, RtProgram& 
 {
     Compile_Shader(compilerInfo, program.info, &program.blob);
     program.SetBytecode();
+}
+
+void Renderer::Compile_Shader(LPCWSTR pFileName, const D3D_SHADER_MACRO* pDefines, ID3DInclude* pInclude, LPCSTR pEntrypoint, LPCSTR pTarget, UINT Flags1, UINT Flags2, ID3DBlob** ppCode) const
+{
+    ComPtr<ID3DBlob> errorBlob;
+    HRESULT result = D3DCompileFromFile(pFileName, pDefines, pInclude, pEntrypoint, pTarget, Flags1, Flags2, ppCode, &errorBlob);
+    if (FAILED(result))
+    {
+        if (errorBlob) {
+            MessageBoxA(nullptr, (char*)errorBlob->GetBufferPointer(), "HLSL error", MB_OK);
+            errorBlob->Release();
+        }
+        ThrowIfFailed(result);
+    }
 }
 
 void Renderer::InitializeRaytracingBufferValues()

@@ -6,16 +6,6 @@
 #include "SamplingHelper.hlsl"
 #include "ALL_CommonBuffers.hlsl"
 
-// Structures
-struct Vertex
-{
-	float3 position;
-	float3 normal;
-	float3 tangent;
-	float3 binormal;
-	float2 uv;
-};
-
 struct RayPayload
 {
 	float vis;

@@ -2,6 +2,7 @@
 #define _CLOSEST_HIT_HLSL
 
 #include "Common.hlsl"
+#include "Constants.hlsl"
 
 // ---[ Closest Hit Shader ]---
 
@@ -40,7 +41,9 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 	};
 	
 	float2 uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
-	payload.albedo = float4(albedoTex.SampleLevel(g_sampler, uv, 0).xyz, 1);
+	//payload.albedo = float4(albedoTex.SampleLevel(g_sampler, uv, 0).xyz, 1);
+	payload.albedo = float4(textureIdColors[vertices[indices_[0]].textureID % 16], 1);
+	//payload.albedo = float4((float) vertices[indices_[0]].textureID / 36, 0, 0, 1);
 }
 
 #endif // _CLOSEST_HIT_HLSL

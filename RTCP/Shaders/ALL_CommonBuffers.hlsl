@@ -1,6 +1,27 @@
 #ifndef _COMMON_BUFFERS_HLSL_
 #define _COMMON_BUFFERS_HLSL_
 
+// Standard Vertex structre
+struct VertexInputType
+{
+	float3 position : POSITION;
+	float3 normal : NORMAL;
+	float3 tangent : TANGENT;
+	float3 binormal : BINORMAL;
+	float2 uv : TEXCOORD0;
+	uint textureID : TEXCOORD1;
+};
+
+struct Vertex
+{
+	float3 position;
+	float3 normal;
+	float3 tangent;
+	float3 binormal;
+	float2 uv;
+	uint textureID;
+};
+
 // Constant Buffers
 struct SceneConstantBuffer
 {

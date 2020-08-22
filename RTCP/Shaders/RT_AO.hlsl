@@ -7,15 +7,6 @@
 #include "ALL_CommonBuffers.hlsl"
 
 // Structures
-struct Vertex
-{
-	float3 position;
-	float3 normal;
-	float3 tangent;
-	float3 binormal;
-	float2 uv;
-};
-
 struct RayPayload
 {
 	float T;
@@ -113,6 +104,10 @@ void RayGen()
 	float prevAO = RTOutput[LaunchIndex].x;
 	ao = ((float) g_aoCB.accFrames * prevAO + ao) / ((float) g_aoCB.accFrames + 1.0f);
 	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, 1.0f); //< Replace all cached AO with current result
+	
+	
+	
+	RTOutput[LaunchIndex.xy] = float4(albedoTexture.Load(int3(LaunchIndex, 0)).xyz, 1.0f);
 }
 
 [shader("miss")]

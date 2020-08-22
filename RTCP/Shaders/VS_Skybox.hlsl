@@ -1,3 +1,8 @@
+#ifndef _VS_SKYBOX_HLSL_
+#define _VS_SKYBOX_HLSL_
+
+#include "ALL_CommonBuffers.hlsl"
+
 struct PixelInputType
 {
 	float4 position : SV_POSITION;
@@ -12,15 +17,6 @@ cbuffer MatrixBuffer : register(b0)
 	matrix g_paddingMatrix;
 };
 
-struct VertexInputType
-{
-	float3 position : POSITION;
-	float3 normal : NORMAL;
-	float3 tangent : TANGENT;
-	float3 binormal : BINORMAL;
-	float2 uv : TEXCOORD0;
-};
-
 PixelInputType main(VertexInputType input)
 {
 	PixelInputType output;
@@ -33,3 +29,5 @@ PixelInputType main(VertexInputType input)
 
 	return output;
 }
+
+#endif // _VS_SKYBOX_HLSL_

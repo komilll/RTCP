@@ -1,11 +1,31 @@
 #include "ModelClass.h"
+#include <WICTextureLoader.h>
+#include <DDSTextureLoader.h>
+#include <DirectXHelpers.h>
+#include <DirectXTex.h>
+#include <SimpleMath.h>
+#include <regex>
 
-ModelClass::ModelClass(std::string path, ComPtr<ID3D12Device2> device)
+ModelClass::ModelClass(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList)
 {
-	LoadModel(path, device);
+#if (_WIN32_WINNT >= 0x0A00 /*_WIN32_WINNT_WIN10*/)
+	Microsoft::WRL::Wrappers::RoInitializeWrapper initialize(RO_INIT_MULTITHREADED);
+	if (FAILED(initialize)) {
+		throw std::exception();
+	}
+	// error
+#else
+	HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+	if (FAILED(hr)) {
+		throw std::exception();
+	}
+	// error
+#endif
+
+	LoadModel(path, device, commandList);
 }
 
-void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device, DXGI_FORMAT indexFormat)
+void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, DXGI_FORMAT indexFormat)
 {
 	Assimp::Importer importer;
 	char result[MAX_PATH];
@@ -14,44 +34,55 @@ void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device, DXGI_
 	const auto index = path.find_last_of('\\');
 	path = path.substr(0, index + 1) + filename;
 
-	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_OptimizeMeshes | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
+	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | /*aiProcess_ConvertToLeftHanded | */ aiProcess_OptimizeMeshes | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
 
 	assert(scene);
 #pragma warning(push)
 #pragma warning(disable : 6011)
 	//ProcessNode(scene->mRootNode, scene);
-	for (unsigned int i = 0; i < scene->mNumMeshes; i++) 
+	for (unsigned int i = 0; i < scene->mNumMeshes; ++i) 
 	{
-		m_meshes.push_back(ProcessMesh(scene->mMeshes[i], scene));
+		m_meshes.push_back(ProcessMesh(scene->mMeshes[i], scene, i, device, commandList));
 	}
 #pragma warning(pop)
 	assert(PrepareBuffers(device, indexFormat) && "Failed to prepare buffers");
 }
 
-void ModelClass::ProcessNode(std::vector<Mesh>& meshes, aiNode* node, const aiScene* scene)
+void ModelClass::ProcessNode(std::vector<Mesh>& meshes, aiNode* node, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList)
 {
 	for (unsigned int i = 0; i < node->mNumMeshes; ++i)
 	{
 		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-		meshes.push_back(ProcessMesh(mesh, scene));
+		meshes.push_back(ProcessMesh(mesh, scene, i, device, commandList));
 	}
 
 	for (unsigned int i = 0; i < node->mNumChildren; ++i)
 	{
-		ProcessNode(meshes, node->mChildren[i], scene);
+		ProcessNode(meshes, node->mChildren[i], scene, device, commandList);
 	}
 }
 
-ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene)
+std::string texType{};
+ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, unsigned int textureID, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList)
 {
+	std::vector<Texture> textures;
 	Mesh localMesh;
 	localMesh.vertices.resize(mesh->mNumVertices);
+
+	if (mesh->mMaterialIndex >= 0)
+	{
+		aiMaterial* mat = scene->mMaterials[mesh->mMaterialIndex];
+		texType = DetermineTextureType(scene, mat);
+	}
 
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
 	{
 		//POSITION
 		VertexBufferStruct vertex;
 		vertex.position = XMFLOAT3{ mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
+
+		// TEXTURE ID
+		vertex.textureID = textureID;
 
 		//NORMAL
 		if (mesh->mNormals) {
@@ -118,11 +149,7 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene)
 		}
 
 		//Store in array
-		localMesh.vertices[i].position = vertex.position;
-		localMesh.vertices[i].uv = vertex.uv;
-		localMesh.vertices[i].normal = vertex.normal;
-		localMesh.vertices[i].binormal = vertex.binormal;
-		localMesh.vertices[i].tangent = vertex.tangent;
+		localMesh.vertices[i] = vertex;
 	}
 
 	unsigned int indicesCount = 0;
@@ -145,7 +172,114 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene)
 		}
 	}
 
+	if (mesh->mMaterialIndex >= 0)
+	{
+		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+
+		std::vector<Texture> diffuseMaps = LoadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse", scene, device, commandList);
+		textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
+	}
+
 	return localMesh;
+}
+
+std::string ModelClass::DetermineTextureType(const aiScene* scene, aiMaterial* mat)
+{
+	aiString texTypeString;
+	mat->GetTexture(aiTextureType_DIFFUSE, 0, &texTypeString);
+	std::string texTypeTestStr = texTypeString.C_Str();
+	if (texTypeTestStr == "*0" || texTypeTestStr == "*1" || texTypeTestStr == "*2" || texTypeTestStr == "*3" || texTypeTestStr == "*4" || texTypeTestStr == "*5") {
+		if (scene->mTextures[0]->mHeight == 0) {
+			return "embedded compressed texture";
+		}
+		else {
+			return "embedded non-compressed texture";
+		}
+	}
+	if (texTypeTestStr.find('.') != std::string::npos) {
+		return "textures are on disk";
+	}
+
+	return ".";
+}
+
+std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList)
+{
+	std::vector<Texture> textures;
+
+	for (UINT i = 0; i < mat->GetTextureCount(type); ++i)
+	{
+		aiString str;
+		mat->GetTexture(type, i, &str);
+		// Check if texture was loaded before and if so, continue to next iteration: skip loading a new texture
+		bool skip = false;
+		for (UINT j = 0; j < m_textures.size(); j++) {
+			if (std::strcmp(m_textures[j].path.c_str(), str.C_Str()) == 0) {
+				textures.push_back(m_textures[j]);
+				skip = true; // A texture with the same filepath has already been loaded, continue to next one. (optimization)
+				break;
+			}
+		}
+
+		if (!skip) {   // If texture hasn't been loaded already, load it
+			Texture texture;
+			if (texType == "embedded compressed texture") {
+				//int textureindex = GetTextureIndex(&str);
+				//texture.resource = GetTextureFromModel(scene, textureindex, device, commandList);
+			}
+			else 
+			{
+				//int textureindex = GetTextureIndex(&str);
+				std::string filename = std::string(str.C_Str());
+				texture.resource = GetTextureFromModel(scene, filename, device, commandList);
+			}
+			texture.type = typeName;
+			texture.path = str.C_Str();
+			textures.push_back(texture);
+			this->m_textures.push_back(texture);  // Store it as texture loaded for entire model, to ensure we won't unnecesery load duplicate textures.
+		}
+	}
+
+	return textures;
+}
+
+int ModelClass::GetTextureIndex(aiString* str)
+{
+	std::string tistr;
+	tistr = str->C_Str();
+	tistr = tistr.substr(1);
+	return stoi(tistr);
+}
+
+ComPtr<ID3D12Resource> ModelClass::GetTextureFromModel(const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList)
+{
+	D3D12_SUBRESOURCE_DATA textureDataSingle;
+	std::unique_ptr<uint8_t[]> decodedData;
+	ComPtr<ID3D12Resource> texture;
+	m_uploadHeaps.push_back({});
+
+	std::string s = std::regex_replace(filename, std::regex("\\\\"), "/");
+
+	std::wstring ws(s.begin(), s.end());
+	ThrowIfFailed(LoadWICTextureFromFileEx(device.Get(), ws.c_str(), 0, D3D12_RESOURCE_FLAG_NONE, WIC_LOADER_FORCE_RGBA32, texture.ReleaseAndGetAddressOf(), decodedData, textureDataSingle));
+
+	const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texture.Get(), 0, 1);
+	//auto desc = texture->GetDesc();
+
+	// uploadHeap must outlive this function - until command list is closed
+	ThrowIfFailed(device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_uploadHeaps[m_uploadHeaps.size() - 1])
+	));
+
+	UpdateSubresources(commandList.Get(), texture.Get(), m_uploadHeaps[m_uploadHeaps.size() - 1].Get(), 0, 0, 1, &textureDataSingle);
+	//commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, InitialResourceState));
+
+	return texture;
 }
 
 bool ModelClass::CreateRectangle(ComPtr<ID3D12Device2> device, float left, float right, float top, float bottom)

@@ -175,9 +175,6 @@
     <FxCompile Include="Shaders\UniformDistribution.hlsl">
       <Filter>Shaders\Helper</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\RT_Normal.hlsl">
-      <Filter>Shaders\Raytracing</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\RT_AO.hlsl">
       <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
