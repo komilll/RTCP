@@ -22,7 +22,7 @@ RWTexture2D<float4> RTOutputAlbedo   			  : register(u1);
 RaytracingAccelerationStructure SceneBVH      : register(t0);
 ByteAddressBuffer indices					  : register(t1);
 StructuredBuffer<Vertex> vertices			  : register(t2);
-Texture2D<float4> albedoTex					  : register(t3);
+Texture2DArray<float4> albedoTex		      : register(t3);
 
 SamplerState g_sampler : register(s0);
 ////

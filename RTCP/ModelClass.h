@@ -15,11 +15,13 @@ class ModelClass
 public:
 	ModelClass() = default;
 	ModelClass(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
+	ModelClass(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& uploadHeap);
 
 	struct Texture {
 		std::string type;
 		std::string path;
 		ComPtr<ID3D12Resource> resource;
+		D3D12_SUBRESOURCE_DATA subresourceData;
 	};
 
 	struct VertexBufferStruct {
@@ -72,12 +74,15 @@ public:
 	// Creating or loading new model
 	void SetFullScreenRectangleModel(ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, float left = -1.0f, float right = 1.0f, float top = 1.0f, float bottom = -1.0f, DXGI_FORMAT indexFormat = DXGI_FORMAT_R32_UINT);
 	void LoadModel(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, DXGI_FORMAT indexFormat = DXGI_FORMAT_R32_UINT);
+	void LoadModel(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& uploadHeap, DXGI_FORMAT indexFormat = DXGI_FORMAT_R32_UINT);
+	void ProcessScene(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
 
 	// Get meshes
 	Mesh GetMesh(int index) const { return m_meshes.at(index); };
 	std::vector<Mesh> GetMeshes() const { return m_meshes; };
 
 	// Get textures
+	ComPtr<ID3D12Resource>& GetTextureResources() { return m_resource; };
 	ComPtr<ID3D12Resource>& GetTextureResource(int index) { return m_textures.at(index).resource; };
 	Texture GetTexture(int index) const { return m_textures.at(index); };
 	std::vector<Texture> GetTextures() const { return m_textures; };
@@ -97,9 +102,9 @@ private:
 	void ProcessNode(std::vector<Mesh>& meshes, aiNode* node, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
 	Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene, unsigned int textureID, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
 	std::string DetermineTextureType(const aiScene* scene, aiMaterial* mat);
-	std::vector<Texture> LoadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
+	std::vector<Texture> LoadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index);
 	int GetTextureIndex(aiString* str);
-	ComPtr<ID3D12Resource> GetTextureFromModel(const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
+	std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> GetTextureFromModel(const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index);
 
 	// Internal functions - creating shapes
 	bool CreateRectangle(ComPtr<ID3D12Device2> device, float left, float right, float top, float bottom);
@@ -110,10 +115,14 @@ private:
 
 //VARIABLES
 private:
+	int m_correctCount = 0;
+	ComPtr<ID3D12Resource> m_resource;
 	std::vector<ComPtr<ID3D12Resource>> m_uploadHeaps{};
 
 	std::vector<Mesh> m_meshes;
 	std::vector<Texture> m_textures;
+
+	ComPtr<ID3D12Resource> m_textureBuffer = NULL;
 
 	ComPtr<ID3D12Resource> m_vertexBuffer = NULL;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
