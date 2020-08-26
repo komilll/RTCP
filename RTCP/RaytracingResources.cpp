@@ -387,9 +387,10 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
     UINT index = 0;
     std::vector<D3D12_STATE_SUBOBJECT> subobjects;
     size_t size = 0;
+    size += 1; // rgs
     for (auto& hitGroup : m_hitGroups)
     {
-        size += 3; // raygen, chs, miss
+        size += 2; // chs, miss
         size += (hitGroup.hitShader.ahs.name != nullptr) ? 1 : 0; // ahs
         size += 1; // hit group
         size += 2; // payload + association
@@ -398,22 +399,26 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
     size += 2; // global root + pipeline config
     subobjects.resize(size);
 
+    std::vector<LPCWSTR> usedNames;
+    std::vector<IDxcBlob> usedBlobs;
+
+    // Add state subobject for the RGS
+    {
+        D3D12_EXPORT_DESC rgsExportDesc = { m_hitGroups[0].rayGenShader.name, nullptr, D3D12_EXPORT_FLAG_NONE };
+
+        D3D12_DXIL_LIBRARY_DESC	rgsLibDesc = {};
+        rgsLibDesc.DXILLibrary.BytecodeLength = m_hitGroups[0].rayGenShader.blob->GetBufferSize();
+        rgsLibDesc.DXILLibrary.pShaderBytecode = m_hitGroups[0].rayGenShader.blob->GetBufferPointer();
+        rgsLibDesc.NumExports = 1;
+        rgsLibDesc.pExports = &rgsExportDesc;
+
+        D3D12_STATE_SUBOBJECT rgs = { D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &rgsLibDesc };
+        subobjects[index++] = rgs;
+        usedNames.push_back(m_hitGroups[0].rayGenShader.name);
+    }
+
     for (auto& hitGroup : m_hitGroups)
     {
-        // Add state subobject for the RGS
-        {
-            D3D12_EXPORT_DESC rgsExportDesc = { hitGroup.rayGenShader.name, hitGroup.rayGenShader.exportToRename, D3D12_EXPORT_FLAG_NONE };
-
-            D3D12_DXIL_LIBRARY_DESC	rgsLibDesc = {};
-            rgsLibDesc.DXILLibrary.BytecodeLength = hitGroup.rayGenShader.blob->GetBufferSize();
-            rgsLibDesc.DXILLibrary.pShaderBytecode = hitGroup.rayGenShader.blob->GetBufferPointer();
-            rgsLibDesc.NumExports = 1;
-            rgsLibDesc.pExports = &rgsExportDesc;
-
-            D3D12_STATE_SUBOBJECT rgs = { D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &rgsLibDesc };
-            subobjects[index++] = rgs;
-        }
-
         //Add state subobject for the Miss shader
         {
             D3D12_EXPORT_DESC msExportDesc = { hitGroup.missShader.name, hitGroup.missShader.exportToRename, D3D12_EXPORT_FLAG_NONE };
@@ -479,11 +484,11 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
         {
             D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION shaderPayloadAssociation = {};
             if (hitGroup.hitShader.ahs.name != nullptr) {
-                const WCHAR* shaderExports[] = { hitGroup.rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
+                const WCHAR* shaderExports[] = { m_hitGroups[0].rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
                 shaderPayloadAssociation = { &subobjects[(index - 1)], _countof(shaderExports), shaderExports };
             }
             else {
-                const WCHAR* shaderExports[] = { hitGroup.rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
+                const WCHAR* shaderExports[] = { m_hitGroups[0].rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
                 shaderPayloadAssociation = { &subobjects[(index - 1)], _countof(shaderExports), shaderExports };
             }
 
@@ -502,12 +507,12 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
             D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION rayGenShaderRootSigAssociation = {};
             if (hitGroup.hitShader.ahs.name != nullptr)
             {
-                const WCHAR* rootSigExports[] = { hitGroup.rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
+                const WCHAR* rootSigExports[] = { m_hitGroups[0].rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
                 rayGenShaderRootSigAssociation = { &subobjects[(index - 1)], _countof(rootSigExports), rootSigExports };
             }
             else
             {
-                const WCHAR* rootSigExports[] = { hitGroup.rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
+                const WCHAR* rootSigExports[] = { m_hitGroups[0].rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
                 rayGenShaderRootSigAssociation = { &subobjects[(index - 1)], _countof(rootSigExports), rootSigExports };
             }
 

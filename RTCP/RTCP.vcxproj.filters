@@ -181,6 +181,9 @@
     <FxCompile Include="Shaders\RT_gBuffer.hlsl">
       <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\RT_Lambertian_Indirect.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

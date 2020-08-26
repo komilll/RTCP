@@ -62,22 +62,22 @@ void RayGen()
 	
 		float visibility = payload.vis;
 		
-		shadeColor += visibility * NoL * lightColor;
+		shadeColor = visibility; //* NoL * lightColor;
 	}
-	shadeColor *= albedo.rgb / PI;
+	//shadeColor *= albedo.rgb / PI;
 	RTOutput[LaunchIndex] = float4(shadeColor, 1.0f);
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload : SV_RayPayload)
 {
-	payload.vis = 1.0f;
+	payload.vis = 0.0f;
 }
 
 [shader("closesthit")]
 void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	
+	payload.vis = 0.0f;
 }
 
 #endif //_RT_LAMBERTIAN_HLSL_

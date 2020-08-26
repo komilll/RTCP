@@ -105,9 +105,9 @@ private:
 
 	// Functions called by PrepareRaytracingResources() - generating shaders
 	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = L"RayGen");
-	void CreateMissShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"Miss") const;
-	void CreateClosestHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"ClosestHit") const;
-	void CreateAnyHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = L"AnyHit") const;
+	void CreateMissShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
+	void CreateClosestHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
+	void CreateAnyHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
 
 #pragma endregion
 

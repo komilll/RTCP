@@ -987,9 +987,9 @@ void Renderer::PrepareRaytracingResources(const std::shared_ptr<ModelClass> mode
     std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
     samplers[0].Init(0, D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR);
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", 2, 2, 5, samplers, L"RayGen_gBuffer");
-    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"Miss_gBuffer");
-    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"ClosestHit_gBuffer");
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", 2, 2, 5, samplers, L"RayGen");
+    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"Miss");
+    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"ClosestHit");
     m_raytracingNormal = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"Group_gBuffer"));
 
     std::vector<TextureWithDesc> textures{};
@@ -1016,9 +1016,9 @@ void Renderer::PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> mo
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", 3, 1, 5, {}, L"RayGen_AO");
-    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"Miss_AO");
-    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"ClosestHit_AO");
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", 3, 1, 5, {}, L"RayGen");
+    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"Miss");
+    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"ClosestHit");
     //CreateAnyHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"AnyHit_AO");
     m_raytracingAO = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"GroupAO"));
 
@@ -1038,15 +1038,26 @@ void Renderer::PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> mo
 
 void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClass> model)
 {
-    RtProgram rayGenShader, missShader;
+    RtProgram rayGenShader{};
+    RtProgram missShader;
     HitProgram hitShader;
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 2, 1, 5, {}, L"RayGen_Lambert");
-    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"Miss_Lambert");
-    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHit_Lambert");
-    HitGroup group = { rayGenShader, missShader, hitShader, L"GroupLambert" };
+    RtProgram missShader_new{};
+    HitProgram hitShader_new{};
+    //RtProgram rayGenShader_new;
 
-    m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"GroupLambert"));
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 2, 1, 5, {}, L"RayGen");
+    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"Miss");
+    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHit");
+
+    //CreateRayGenShader(rayGenShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 2, 1, 5, {}, L"RayGen_Lambert_new");
+    CreateMissShader(missShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian_Indirect.hlsl", L"MissIndirect");
+    CreateClosestHitShader(hitShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian_Indirect.hlsl", L"ClosestHitIndirect");
+
+    HitGroup group = { rayGenShader, missShader, hitShader, L"GroupLambert" };
+    HitGroup group_new = { rayGenShader, missShader_new, hitShader_new, L"GroupLambert_new" };
+
+    m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, group_new }));
 
     std::vector<TextureWithDesc> textures{};
     CreateTexture2D(m_rtLambertTexture, m_windowWidth, m_windowHeight);
