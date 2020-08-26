@@ -148,22 +148,10 @@
     <FxCompile Include="Shaders\ALL_UberBuffer.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\ClosestHit.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Common.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\Miss.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\pixelShader.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\PS_Skybox.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RayGen.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\vertexShader.hlsl">
@@ -189,6 +177,9 @@
     </FxCompile>
     <FxCompile Include="Shaders\ALL_CommonBuffers.hlsl">
       <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RT_gBuffer.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
   </ItemGroup>
   <ItemGroup>

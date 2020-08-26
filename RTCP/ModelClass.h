@@ -22,6 +22,7 @@ public:
 		std::string path;
 		ComPtr<ID3D12Resource> resource;
 		D3D12_SUBRESOURCE_DATA subresourceData;
+		int textureID;
 	};
 
 	struct VertexBufferStruct {

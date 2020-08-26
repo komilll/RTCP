@@ -192,11 +192,20 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 	std::vector<Texture> textures;
 	Mesh localMesh;
 	localMesh.vertices.resize(mesh->mNumVertices);
+	bool hasTex = false;
 
 	if (mesh->mMaterialIndex >= 0)
 	{
-		aiMaterial* mat = scene->mMaterials[mesh->mMaterialIndex];
-		texType = DetermineTextureType(scene, mat);
+		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+		texType = DetermineTextureType(scene, material);
+
+		std::vector<Texture> diffuseMaps = LoadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse", scene, device, commandList, textureID);
+		textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
+		if (diffuseMaps.size() > 0) 
+		{
+			hasTex = true;
+			textureID = diffuseMaps[0].textureID;
+		}
 	}
 
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
@@ -206,7 +215,7 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 		vertex.position = XMFLOAT3{ mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
 
 		// TEXTURE ID
-		vertex.textureID = textureID;
+		vertex.textureID = hasTex ? textureID : -1;
 
 		//NORMAL
 		if (mesh->mNormals) {
@@ -296,14 +305,6 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 		}
 	}
 
-	if (mesh->mMaterialIndex >= 0)
-	{
-		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-
-		std::vector<Texture> diffuseMaps = LoadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse", scene, device, commandList, textureID);
-		textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
-	}
-
 	return localMesh;
 }
 
@@ -340,6 +341,7 @@ std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(aiMaterial* ma
 		for (UINT j = 0; j < m_textures.size(); j++) {
 			if (std::strcmp(m_textures[j].path.c_str(), str.C_Str()) == 0) {
 				textures.push_back(m_textures[j]);
+				textures[textures.size() - 1].textureID = m_textures[j].textureID;
 				skip = true; // A texture with the same filepath has already been loaded, continue to next one. (optimization)
 				break;
 			}
@@ -359,6 +361,7 @@ std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(aiMaterial* ma
 				texture.resource = data.first;
 				texture.subresourceData = data.second;
 			}
+			texture.textureID = index;
 			texture.type = typeName;
 			texture.path = str.C_Str();
 			textures.push_back(texture);
@@ -407,24 +410,20 @@ std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTexture
 
 	const UINT64 uploadBufferStep = GetRequiredIntermediateSize(m_resource.Get(), 0, 1); // All of our textures are the same size in this case.
 
-	if (textureDataSingle.SlicePitch == 128 * 128 * 4)
+	//if (textureDataSingle.SlicePitch == 128 * 128 * 4)
+	if (texture->GetDesc().Width == 128 && texture->GetDesc().Height == 128)
 	{
-		if (m_correctCount < 5) 
-		{
-			commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
-			//UpdateSubresources(commandList.Get(), m_textures[i].resource.Get(), uploadHeap.Get(), correctCount * uploadBufferStep, 0, subresourceCount, &m_textures[i].subresourceData);
+		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
 
-			D3D12_TEXTURE_COPY_LOCATION dst{};
-			dst.pResource = m_resource.Get();
-			dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-			dst.SubresourceIndex = m_correctCount;
+		D3D12_TEXTURE_COPY_LOCATION dst{};
+		dst.pResource = m_resource.Get();
+		dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		dst.SubresourceIndex = index;
 
-			D3D12_TEXTURE_COPY_LOCATION src{};
-			src.pResource = texture.Get();
+		D3D12_TEXTURE_COPY_LOCATION src{};
+		src.pResource = texture.Get();
 
-			commandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
-			m_correctCount++;
-		}
+		commandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
 	}
 
 	return { texture, textureDataSingle };

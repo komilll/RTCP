@@ -104,31 +104,12 @@ void RayGen()
 	float prevAO = RTOutput[LaunchIndex].x;
 	ao = ((float) g_aoCB.accFrames * prevAO + ao) / ((float) g_aoCB.accFrames + 1.0f);
 	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, 1.0f); //< Replace all cached AO with current result
-	
-	
-	
-	RTOutput[LaunchIndex.xy] = float4(albedoTexture.Load(int3(LaunchIndex, 0)).xyz, 1.0f);
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload : SV_RayPayload)
 {
 	// Empty
-}
-
-// Retrieve attribute at a hit position interpolated from vertex attributes using the hit's barycentrics.
-float3 HitAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attrib)
-{
-	return vertexAttribute[0] +
-        attrib.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
-        attrib.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
-}
-
-float2 HitAttribute(float2 vertexAttribute[3], BuiltInTriangleIntersectionAttributes attrib)
-{
-	return vertexAttribute[0] +
-        attrib.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
-        attrib.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
 }
 
 [shader("closesthit")]

@@ -42,7 +42,7 @@ void RayGen()
 	float3 pixelWorldSpacePosition = primaryRayOrigin + (primaryRayDirection * normalAndDepth.w);
 	if (normalAndDepth.w == 0)
 	{
-		RTOutput[LaunchIndex] = float4(0, 0, 0, 1.0f);
+		RTOutput[LaunchIndex] = albedo;
 		return;
 	}
 	
