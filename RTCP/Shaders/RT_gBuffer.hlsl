@@ -97,6 +97,8 @@ void Miss(inout RayPayload payload)
 	float3 origin = g_sceneCB.cameraPosition.xyz;
 	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, origin, rayDir);
 	
+	rayDir.z = -rayDir.z;
+	
 	payload.albedo = float4(skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb, 0);
 	payload.normalWithDepth = float4(0, 0, 0, 0);
 }

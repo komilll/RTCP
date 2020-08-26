@@ -103,4 +103,13 @@ struct HitProgram
 
 };
 
+struct HitGroup
+{
+	RtProgram rayGenShader;
+	RtProgram missShader;
+	HitProgram hitShader;
+
+	LPCWSTR hitGroupName;
+};
+
 #endif // !_RAYTRACING_SHADERS_HELPER_H_

@@ -1044,6 +1044,8 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
     CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 2, 1, 5, {}, L"RayGen_Lambert");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"Miss_Lambert");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHit_Lambert");
+    HitGroup group = { rayGenShader, missShader, hitShader, L"GroupLambert" };
+
     m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"GroupLambert"));
 
     std::vector<TextureWithDesc> textures{};

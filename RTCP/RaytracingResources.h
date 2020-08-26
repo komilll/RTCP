@@ -38,6 +38,8 @@ class RaytracingResources
 public:
 	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, LPCWSTR rayGenName, LPCWSTR missName, LPCWSTR hitName, LPCWSTR hitGroupName, LPCWSTR rayGenNameExport = L"RayGen", LPCWSTR missNameExport = L"Miss", LPCWSTR hitNameExport = L"Hit");
 	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName);
+	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, HitGroup hitGroup);
+	RaytracingResources(ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, std::shared_ptr<ModelClass> model, std::vector<HitGroup> hitGroups);
 
     void CreateRaytracingPipelineContinue(ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, std::vector< ResourceWithSize> buffersWithSize, std::vector<bool> isUAV, size_t maxPayloadSize);
 	ComPtr<ID3D12DescriptorHeap> GetDescriptorHeap() const { return m_descriptorHeap; };
@@ -56,10 +58,12 @@ private:
 	void CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSize);
 
 public:
-	RtProgram m_rayGenShader;
-	RtProgram m_missShader;
-	HitProgram m_hitShader;
-	LPCWSTR m_hitGroupName;
+	//RtProgram m_rayGenShader;
+	//RtProgram m_missShader;
+	//HitProgram m_hitShader;
+	//LPCWSTR m_hitGroupName;
+
+	std::vector<HitGroup> m_hitGroups;
 
 private:
 	// Acceleration structure data
