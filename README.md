@@ -1,7 +1,7 @@
-# RTCP
-RTCP stands for RayTracing/Culling Project - main focus of this repo is to learn DirectX12 while creating path tracer using DXR and implementing GPU culling algorithms using task/mesh shaders
+<h1>RTCP - RayTracing/Culling Project</h1>
+Main focus of this repo is to learn DirectX12 while creating path tracer using DXR and implementing GPU culling algorithms using task/mesh shaders
 
-<h4>Sources:<h4>
+<h4>Sources:</h4>
 <ul>
   <li>http://cwyman.org/code/dxrTutors/dxr_tutors.md.html - naive RTAO implementation and basic RTGI algorithm
   <li>http://www.realtimerendering.com/raytracinggems/ - gems book on "Open access" license
