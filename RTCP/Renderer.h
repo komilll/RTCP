@@ -12,6 +12,7 @@
 #include "CBuffer.h"
 #include "RaytracingShadersHelper.h"
 #include "RaytracingResources.h"
+#include "Profiler.h"
 
 using namespace DirectX;
 typedef std::array<D3D12_INPUT_ELEMENT_DESC, 6> BasicInputLayout;
@@ -49,7 +50,6 @@ private:
 
 	// Executing commands/synchronization functions
 	void PopulateCommandList();
-	void CloseAndSynchronizeCommandListsOnInit();
 	void CloseCommandList();
 	void WaitForPreviousFrame();
 	void MoveToNextFrame();
@@ -127,6 +127,12 @@ private:
 	bool USE_AO_THIN_LENS = false;
 	bool USE_DIFFUSE_GI_INDIRECT = true;
 
+	// Frame data
+	UINT64 m_currentCPUFrame = 0;
+	UINT64 m_currentGPUFrame = 0;
+	UINT64 m_currentFrameIdx = 0;
+	std::shared_ptr<Profiler> m_profiler = nullptr;
+
 	// Camera settings
 	XMFLOAT3 m_cameraPosition{ 0,0,0 };
 	XMFLOAT3 m_cameraRotation{ 0,0,0 };
@@ -138,6 +144,7 @@ private:
 
 	// Helper variables
 	bool m_resetFrameAO = false;
+	bool m_resetFrameProfiler = false;
 	UINT m_rtvDescriptorSize = 0;
 
 	// Pipeline variables - device, commandQueue, swap chain

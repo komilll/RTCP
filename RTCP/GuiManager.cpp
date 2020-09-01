@@ -35,6 +35,8 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
             /*m_renderer->m_giBuffer. = true;*/
         }
 
+        ImGui::Text(m_renderer->m_profiler->GetOutputString());
+
         // Camera position/rotation
         char camPosText[100];
         char camRotText[100];

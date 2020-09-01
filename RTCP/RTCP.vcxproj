@@ -164,6 +164,7 @@
     <ClInclude Include="Main.h" />
     <ClInclude Include="ModelClass.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Profiler.h" />
     <ClInclude Include="RaytracingResources.h" />
     <ClInclude Include="RaytracingShadersHelper.h" />
     <ClInclude Include="Renderer.h" />
@@ -180,6 +181,7 @@
     <ClCompile Include="InputManager.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="ModelClass.cpp" />
+    <ClCompile Include="Profiler.cpp" />
     <ClCompile Include="RaytracingResources.cpp" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="RTCP.cpp" />

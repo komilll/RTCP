@@ -33,8 +33,14 @@ void Renderer::OnRender()
     ID3D12CommandList* ppCommandLists[] = { m_commandList.Get(), m_commandListSkybox.Get() };
     m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
+    m_currentCPUFrame++;
+
     ThrowIfFailed(m_swapChain->Present(1, 0));
     MoveToNextFrame();
+
+    m_currentFrameIdx = m_currentCPUFrame % m_frameCount;
+    m_profiler->EndFrame(m_currentFrameIdx, m_commandQueue.Get(), m_resetFrameProfiler);
+    m_resetFrameProfiler = false;
 }
 
 void Renderer::OnInit(HWND hwnd)
@@ -46,6 +52,9 @@ void Renderer::OnInit(HWND hwnd)
     auto now = std::chrono::high_resolution_clock::now();
     auto msTime = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
     m_rng = std::mt19937(uint32_t(msTime.time_since_epoch().count()));
+
+    m_profiler = std::shared_ptr<Profiler>(new Profiler());
+    m_profiler->Initialize(m_device.Get(), m_frameCount);
 }
 
 void Renderer::OnUpdate()
@@ -157,6 +166,7 @@ void Renderer::AddCameraPosition(float x, float y, float z)
         m_cameraPositionStoredInFrame.z = z;
         CreateViewAndPerspective();
         m_resetFrameAO = true;
+        m_resetFrameProfiler = true;
     }
 }
 
@@ -181,6 +191,7 @@ void Renderer::AddCameraRotation(float x, float y, float z)
 
         CreateViewAndPerspective();
         m_resetFrameAO = true;
+        m_resetFrameProfiler = true;
     }
 }
 
@@ -475,6 +486,8 @@ void Renderer::PopulateCommandList()
         ThrowIfFailed(m_commandAllocatorsSkybox[m_frameIndex]->Reset());
         ThrowIfFailed(m_commandListSkybox->Reset(m_commandAllocatorsSkybox[m_frameIndex].Get(), m_pipelineStateSkybox.Get()));
 
+        auto fullFrameIdx = m_profiler->StartProfile(m_commandList.Get(), "Full frame");
+
         // Wait for the transitions to complete
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
@@ -524,6 +537,8 @@ void Renderer::PopulateCommandList()
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+        m_profiler->EndProfile(m_commandList.Get(), fullFrameIdx, m_currentFrameIdx);
     }
     else
     {
@@ -627,6 +642,7 @@ void Renderer::MoveToNextFrame()
     {
         ThrowIfFailed(m_fence->SetEventOnCompletion(m_fenceValues[m_frameIndex], m_fenceEvent));
         WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
+        m_currentGPUFrame++;
     }
 
     // Set the fence value for the next frame.

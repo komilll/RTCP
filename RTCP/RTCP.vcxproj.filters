@@ -96,6 +96,9 @@
     <ClInclude Include="External\imgui\imgui.h">
       <Filter>Resource Files\imgui</Filter>
     </ClInclude>
+    <ClInclude Include="Profiler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -138,6 +141,9 @@
       <Filter>Resource Files\imgui</Filter>
     </ClCompile>
     <ClCompile Include="GuiManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Profiler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
