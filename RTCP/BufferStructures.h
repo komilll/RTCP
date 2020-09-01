@@ -38,6 +38,15 @@ typedef struct _aoConstantBuffer
 } AoConstantBuffer;
 static_assert((sizeof(AoConstantBuffer) % 256) == 0, "Ao Constant Buffer size must be 256-byte aligned");
 
+typedef struct _giConstantBuffer
+{
+	int useIndirect = 1;
+
+	float padding[63] = {};
+} GiConstantBuffer;
+static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
+
+
 typedef struct _cameraConstantBuffer
 {
 	XMFLOAT2 jitterCamera;

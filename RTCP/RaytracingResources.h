@@ -46,6 +46,7 @@ public:
 	ComPtr<ID3D12Resource> GetShaderTable() const { return m_shaderTable; };
 	uint32_t GetShaderTableRecordSize() const { return m_shaderTableRecordSize; };
 	ComPtr<ID3D12StateObject> GetRTPSO() const { return m_rtpso; };
+	D3D12_DISPATCH_RAYS_DESC GetDispatchRaysDesc(UINT width, UINT height, UINT depth) const;
 
 private:
 	// Called in constructor
@@ -73,12 +74,22 @@ private:
 	ComPtr<ID3D12Resource> m_tlasScratch = NULL;
 	ComPtr<ID3D12Resource> m_tlasResult = NULL;
 
+	// RTPSO data
 	ComPtr<ID3D12StateObject> m_rtpso = NULL;
 	ComPtr<ID3D12StateObjectProperties> m_rtpsoInfo = NULL;
 	ComPtr<ID3D12DescriptorHeap> m_descriptorHeap = NULL;
 
+	// Shader table data
 	uint32_t m_shaderTableRecordSize;
 	ComPtr<ID3D12Resource> m_shaderTable = NULL;
+	struct ShaderTableStruct {
+		// Structure is based on assumption of order: rgs - miss - hit
+		uint32_t raygenSize;
+		uint32_t missSize;
+		uint32_t missStride;
+		uint32_t hitSize;
+		uint32_t hitStride;
+	} m_shaderTableStruct;
 };
 #endif // !_RAYTRACING_RESOURCES_H_
 

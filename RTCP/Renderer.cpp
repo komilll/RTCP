@@ -132,6 +132,12 @@ void Renderer::OnUpdate()
         m_aoBuffer.Update();
         m_cameraBuffer.Update();
     }
+
+    // Update gi buffer
+    {
+        m_giBuffer.value.useIndirect = USE_DIFFUSE_GI_INDIRECT ? 1 : 0;
+        m_giBuffer.Update();
+    }
 }
 
 void Renderer::OnDestroy()
@@ -186,7 +192,7 @@ void Renderer::AddCameraRotation(XMFLOAT3 addRot)
 void Renderer::LoadPipeline(HWND hwnd)
 {
     UINT dxgiFactoryFlags = 0;
-#if defined(_DEBUG)
+#if defined(_DEBUG_RTCP)
     // Enable the D3D12 debug layer.
     {
         ComPtr<ID3D12Debug> debugController;
@@ -319,7 +325,7 @@ void Renderer::LoadAssets()
         CreateRootSignatureRTCP(_countof(rootParameters), _countof(samplers), rootParameters, samplers, rootSignatureFlags, m_rootSignatureSkybox);
     }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG_RTCP)
     // Enable better shader debugging with the graphics debugging tools.
     UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
@@ -475,30 +481,11 @@ void Renderer::PopulateCommandList()
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
         // Set the UAV/SRV/CBV and sampler heaps
-        ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingNormal->GetDescriptorHeap().Get() };
+        ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingGBuffer->GetDescriptorHeap().Get() };
         m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-        ComPtr<ID3D12Resource> shaderTable = m_raytracingNormal->GetShaderTable();
-        uint32_t shaderTableRecordSize = m_raytracingNormal->GetShaderTableRecordSize();
-        ComPtr<ID3D12StateObject> rtpso = m_raytracingNormal->GetRTPSO();
-
-        // Dispatch rays
-        D3D12_DISPATCH_RAYS_DESC desc = {};
-        desc.RayGenerationShaderRecord.StartAddress = shaderTable->GetGPUVirtualAddress();
-        desc.RayGenerationShaderRecord.SizeInBytes = shaderTableRecordSize;
-
-        desc.MissShaderTable.StartAddress = shaderTable->GetGPUVirtualAddress() + shaderTableRecordSize;
-        desc.MissShaderTable.SizeInBytes = shaderTableRecordSize;		// Only a single Miss program entry
-        desc.MissShaderTable.StrideInBytes = shaderTableRecordSize;
-
-        desc.HitGroupTable.StartAddress = shaderTable->GetGPUVirtualAddress() + (shaderTableRecordSize * 2);
-        desc.HitGroupTable.SizeInBytes = shaderTableRecordSize;			// Only a single Hit program entry
-        desc.HitGroupTable.StrideInBytes = shaderTableRecordSize;
-
-        desc.Width = m_windowWidth;
-        desc.Height = m_windowHeight;
-        desc.Depth = 1;
-
+        ComPtr<ID3D12StateObject> rtpso = m_raytracingGBuffer->GetRTPSO();
+        D3D12_DISPATCH_RAYS_DESC desc = m_raytracingGBuffer->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
         m_commandList->SetPipelineState1(rtpso.Get());
         m_commandList->DispatchRays(&desc);
 
@@ -510,27 +497,8 @@ void Renderer::PopulateCommandList()
             ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingAO->GetDescriptorHeap().Get() };
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-            ComPtr<ID3D12Resource> shaderTable = m_raytracingAO->GetShaderTable();
-            uint32_t shaderTableRecordSize = m_raytracingAO->GetShaderTableRecordSize();
             ComPtr<ID3D12StateObject> rtpso = m_raytracingAO->GetRTPSO();
-
-            // Dispatch rays
-            D3D12_DISPATCH_RAYS_DESC desc = {};
-            desc.RayGenerationShaderRecord.StartAddress = shaderTable->GetGPUVirtualAddress();
-            desc.RayGenerationShaderRecord.SizeInBytes = shaderTableRecordSize;
-
-            desc.MissShaderTable.StartAddress = shaderTable->GetGPUVirtualAddress() + shaderTableRecordSize;
-            desc.MissShaderTable.SizeInBytes = shaderTableRecordSize;		// Only a single Miss program entry
-            desc.MissShaderTable.StrideInBytes = shaderTableRecordSize;
-
-            desc.HitGroupTable.StartAddress = shaderTable->GetGPUVirtualAddress() + (shaderTableRecordSize * 2);
-            desc.HitGroupTable.SizeInBytes = shaderTableRecordSize;			// Only a single Hit program entry
-            desc.HitGroupTable.StrideInBytes = shaderTableRecordSize;
-
-            desc.Width = m_windowWidth;
-            desc.Height = m_windowHeight;
-            desc.Depth = 1;
-
+            D3D12_DISPATCH_RAYS_DESC desc = m_raytracingAO->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
             m_commandList->SetPipelineState1(rtpso.Get());
             m_commandList->DispatchRays(&desc);
         }
@@ -545,27 +513,8 @@ void Renderer::PopulateCommandList()
             ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingLambert->GetDescriptorHeap().Get() };
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-            ComPtr<ID3D12Resource> shaderTable = m_raytracingLambert->GetShaderTable();
-            uint32_t shaderTableRecordSize = m_raytracingLambert->GetShaderTableRecordSize();
             ComPtr<ID3D12StateObject> rtpso = m_raytracingLambert->GetRTPSO();
-
-            // Dispatch rays
-            D3D12_DISPATCH_RAYS_DESC desc = {};
-            desc.RayGenerationShaderRecord.StartAddress = shaderTable->GetGPUVirtualAddress();
-            desc.RayGenerationShaderRecord.SizeInBytes = shaderTableRecordSize;
-
-            desc.MissShaderTable.StartAddress = shaderTable->GetGPUVirtualAddress() + shaderTableRecordSize;
-            desc.MissShaderTable.SizeInBytes = shaderTableRecordSize;		// Only a single Miss program entry
-            desc.MissShaderTable.StrideInBytes = shaderTableRecordSize;
-
-            desc.HitGroupTable.StartAddress = shaderTable->GetGPUVirtualAddress() + (shaderTableRecordSize * 2);
-            desc.HitGroupTable.SizeInBytes = shaderTableRecordSize;			// Only a single Hit program entry
-            desc.HitGroupTable.StrideInBytes = shaderTableRecordSize;
-
-            desc.Width = m_windowWidth;
-            desc.Height = m_windowHeight;
-            desc.Depth = 1;
-
+            D3D12_DISPATCH_RAYS_DESC desc = m_raytracingLambert->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
             m_commandList->SetPipelineState1(rtpso.Get());
             m_commandList->DispatchRays(&desc);
         }
@@ -990,7 +939,7 @@ void Renderer::PrepareRaytracingResources(const std::shared_ptr<ModelClass> mode
     CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", 2, 2, 5, samplers, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"Miss");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"ClosestHit");
-    m_raytracingNormal = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"Group_gBuffer"));
+    m_raytracingGBuffer = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"Group_gBuffer"));
 
     std::vector<TextureWithDesc> textures{};
     CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -1008,7 +957,7 @@ void Renderer::PrepareRaytracingResources(const std::shared_ptr<ModelClass> mode
     skyboxDesc.TextureCube.MostDetailedMip = 0;
     textures.push_back({ TextureWithDesc{m_skyboxTexture, skyboxDesc } });
 
-    CreateRaytracingPipeline(m_raytracingNormal.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, { }, sizeof(XMFLOAT4) * 2);
+    CreateRaytracingPipeline(m_raytracingGBuffer.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, { }, sizeof(XMFLOAT4) * 2);
 }
 
 void Renderer::PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> model)
@@ -1033,6 +982,11 @@ void Renderer::PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> mo
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, normalDesc } });
     textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, srvDesc } });
 
+    D3D12_SHADER_RESOURCE_VIEW_DESC skyboxDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+    skyboxDesc.TextureCube.MipLevels = 1;
+    skyboxDesc.TextureCube.MostDetailedMip = 0;
+    textures.push_back({ TextureWithDesc{m_skyboxTexture, skyboxDesc } });
+
     CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_aoBuffer, {}, sizeof(XMFLOAT4) * 2);
 }
 
@@ -1044,9 +998,11 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
 
     RtProgram missShader_new{};
     HitProgram hitShader_new{};
-    //RtProgram rayGenShader_new;
+    
+    std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
+    samplers[0].Init(0, D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR);
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 2, 1, 5, {}, L"RayGen");
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 3, 1, 6, samplers, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"Miss");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHit");
 
@@ -1070,7 +1026,7 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, normalDesc } });
     textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, srvDesc } });
 
-    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(nullptr), GetVertexBufferSRVDesc(nullptr, sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer);
+    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(nullptr), GetVertexBufferSRVDesc(nullptr, sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)

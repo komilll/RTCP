@@ -65,7 +65,7 @@ ComPtr<ID3D12Device5> DeviceManager::CreateDevice(ComPtr<IDXGIFactory4> dxgiFact
         ));
     }
 
-#if defined(_DEBUG)
+#if defined(_DEBUG_RTCP)
     ComPtr<ID3D12InfoQueue> pInfoQueue;
     if (SUCCEEDED(device.As(&pInfoQueue)))
     {
@@ -177,7 +177,7 @@ ComPtr<IDXGIAdapter4> DeviceManager::GetAdapter(bool useWarp) const
 {
     ComPtr<IDXGIFactory4> dxgiFactory;
     UINT createFactoryFlags = 0;
-#if defined(_DEBUG)
+#if defined(_DEBUG_RTCP)
     createFactoryFlags = DXGI_CREATE_FACTORY_DEBUG;
 #endif
 

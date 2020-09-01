@@ -54,6 +54,30 @@ void RaytracingResources::CreateRaytracingPipelineContinue(ID3D12Device5* device
     CreateShaderTable(device);
 }
 
+D3D12_DISPATCH_RAYS_DESC RaytracingResources::GetDispatchRaysDesc(UINT width, UINT height, UINT depth) const
+{
+    D3D12_DISPATCH_RAYS_DESC desc = {};
+    // rgs
+    desc.RayGenerationShaderRecord.StartAddress = m_shaderTable->GetGPUVirtualAddress();
+    desc.RayGenerationShaderRecord.SizeInBytes = m_shaderTableStruct.raygenSize;
+
+    // hit
+    desc.HitGroupTable.StartAddress = m_shaderTable->GetGPUVirtualAddress() + m_shaderTableStruct.raygenSize;
+    desc.HitGroupTable.SizeInBytes = m_shaderTableStruct.hitSize;
+    desc.HitGroupTable.StrideInBytes = m_shaderTableStruct.hitStride;
+
+    // miss
+    desc.MissShaderTable.StartAddress = m_shaderTable->GetGPUVirtualAddress() + m_shaderTableStruct.raygenSize + m_shaderTableStruct.hitSize;
+    desc.MissShaderTable.SizeInBytes = m_shaderTableStruct.missSize;
+    desc.MissShaderTable.StrideInBytes = m_shaderTableStruct.missStride;
+
+    desc.Width = width;
+    desc.Height = height;
+    desc.Depth = depth;
+
+    return desc;
+}
+
 void RaytracingResources::CreateBLAS(std::shared_ptr<ModelClass> model, ID3D12Device5* device, ComPtr<ID3D12GraphicsCommandList4> commandList, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags)
 {
     // Describe the geometry that goes in the bottom acceleration structure(s)
@@ -326,6 +350,14 @@ The ray generation program requires the largest entry:
   = 40 bytes ->> aligns to 64 bytes
 The entry size must be aligned up to D3D12_RAYTRACING_SHADER_BINDING_TABLE_RECORD_BYTE_ALIGNMENT
 */
+// Bindings based on - http://www.realtimerendering.com/raytracinggems/unofficial_RayTracingGems_v1.7.pdf#page=82&zoom=160,-147,633
+
+    // Set struct data
+    m_shaderTableStruct.raygenSize = 64;
+    m_shaderTableStruct.missStride = 32;
+    m_shaderTableStruct.hitStride = 64;
+    m_shaderTableStruct.missSize = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, m_shaderTableStruct.missStride * static_cast<uint32_t>(m_hitGroups.size());
+    m_shaderTableStruct.hitSize = m_shaderTableStruct.hitStride * static_cast<uint32_t>(m_hitGroups.size());
 
     uint32_t shaderIdSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
     uint32_t shaderTableSize = 0;
@@ -334,8 +366,7 @@ The entry size must be aligned up to D3D12_RAYTRACING_SHADER_BINDING_TABLE_RECOR
     m_shaderTableRecordSize += 8;							// CBV/SRV/UAV descriptor table
     m_shaderTableRecordSize = ALIGN(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, m_shaderTableRecordSize);
 
-    shaderTableSize = (m_shaderTableRecordSize * 3);		// 3 shader records in the table
-    shaderTableSize = ALIGN(D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, shaderTableSize);
+    shaderTableSize = ALIGN(D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, m_shaderTableStruct.raygenSize + m_shaderTableStruct.missSize + m_shaderTableStruct.hitSize);
 
     // Create the shader table buffer
     ThrowIfFailed(device->CreateCommittedResource(
@@ -351,22 +382,26 @@ The entry size must be aligned up to D3D12_RAYTRACING_SHADER_BINDING_TABLE_RECOR
     uint8_t* pData;
     ThrowIfFailed(m_shaderTable->Map(0, nullptr, (void**)&pData));
 
-    // Shader Record 0 - Ray Generation program and local root parameter data (descriptor table with constant buffer and IB/VB pointers)
+    // Ray Generation program and local root parameter data (descriptor table with constant buffer and IB/VB pointers)
     memcpy(pData, m_rtpsoInfo->GetShaderIdentifier(m_hitGroups[0].rayGenShader.name), shaderIdSize);
-
-    // Set the root parameter data. Point to start of descriptor heap.
     *reinterpret_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(pData + shaderIdSize) = m_descriptorHeap->GetGPUDescriptorHandleForHeapStart();
 
-    // Shader Record 1 - Miss program (no local root arguments to set)
-    pData += m_shaderTableRecordSize;
-    memcpy(pData, m_rtpsoInfo->GetShaderIdentifier(m_hitGroups[0].missShader.name), shaderIdSize);
+    // Closest Hit program and local root parameter data (descriptor table with constant buffer and IB/VB pointers)
+    pData += m_shaderTableStruct.raygenSize;
+    for (int i = 0; i < m_hitGroups.size(); ++i)
+    {
+        memcpy(pData, m_rtpsoInfo->GetShaderIdentifier(m_hitGroups[i].hitGroupName), shaderIdSize);
+        pData += shaderIdSize;
+        *reinterpret_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(pData) = m_descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+        pData += shaderIdSize;
+    }
 
-    // Shader Record 2 - Closest Hit program and local root parameter data (descriptor table with constant buffer and IB/VB pointers)
-    pData += m_shaderTableRecordSize;
-    memcpy(pData, m_rtpsoInfo->GetShaderIdentifier(m_hitGroups[0].hitGroupName), shaderIdSize);
-
-    // Set the root parameter data. Point to start of descriptor heap.
-    *reinterpret_cast<D3D12_GPU_DESCRIPTOR_HANDLE*>(pData + shaderIdSize) = m_descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+    // Miss program (no local root arguments to set)
+    for (int i = 0; i < m_hitGroups.size(); ++i) 
+    {
+        memcpy(pData, m_rtpsoInfo->GetShaderIdentifier(m_hitGroups[i].missShader.name), shaderIdSize);
+        pData += shaderIdSize;
+    }
 
     // Unmap
     m_shaderTable->Unmap(0, nullptr);
@@ -399,26 +434,23 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
     size += 2; // global root + pipeline config
     subobjects.resize(size);
 
-    std::vector<LPCWSTR> usedNames;
-    std::vector<IDxcBlob> usedBlobs;
-
-    // Add state subobject for the RGS
+#pragma region HitGroup creation - 1
     {
-        D3D12_EXPORT_DESC rgsExportDesc = { m_hitGroups[0].rayGenShader.name, nullptr, D3D12_EXPORT_FLAG_NONE };
+        HitGroup hitGroup = m_hitGroups[0];
+        // Add state subobject for the RGS
+        {
+            D3D12_EXPORT_DESC rgsExportDesc = { hitGroup.rayGenShader.name, nullptr, D3D12_EXPORT_FLAG_NONE };
 
-        D3D12_DXIL_LIBRARY_DESC	rgsLibDesc = {};
-        rgsLibDesc.DXILLibrary.BytecodeLength = m_hitGroups[0].rayGenShader.blob->GetBufferSize();
-        rgsLibDesc.DXILLibrary.pShaderBytecode = m_hitGroups[0].rayGenShader.blob->GetBufferPointer();
-        rgsLibDesc.NumExports = 1;
-        rgsLibDesc.pExports = &rgsExportDesc;
+            D3D12_DXIL_LIBRARY_DESC	rgsLibDesc = {};
+            rgsLibDesc.DXILLibrary.BytecodeLength = hitGroup.rayGenShader.blob->GetBufferSize();
+            rgsLibDesc.DXILLibrary.pShaderBytecode = hitGroup.rayGenShader.blob->GetBufferPointer();
+            rgsLibDesc.NumExports = 1;
+            rgsLibDesc.pExports = &rgsExportDesc;
 
-        D3D12_STATE_SUBOBJECT rgs = { D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &rgsLibDesc };
-        subobjects[index++] = rgs;
-        usedNames.push_back(m_hitGroups[0].rayGenShader.name);
-    }
+            D3D12_STATE_SUBOBJECT rgs = { D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &rgsLibDesc };
+            subobjects[index++] = rgs;
+        }
 
-    for (auto& hitGroup : m_hitGroups)
-    {
         //Add state subobject for the Miss shader
         {
             D3D12_EXPORT_DESC msExportDesc = { hitGroup.missShader.name, hitGroup.missShader.exportToRename, D3D12_EXPORT_FLAG_NONE };
@@ -484,11 +516,11 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
         {
             D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION shaderPayloadAssociation = {};
             if (hitGroup.hitShader.ahs.name != nullptr) {
-                const WCHAR* shaderExports[] = { m_hitGroups[0].rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
+                const WCHAR* shaderExports[] = { hitGroup.rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
                 shaderPayloadAssociation = { &subobjects[(index - 1)], _countof(shaderExports), shaderExports };
             }
             else {
-                const WCHAR* shaderExports[] = { m_hitGroups[0].rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
+                const WCHAR* shaderExports[] = { hitGroup.rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
                 shaderPayloadAssociation = { &subobjects[(index - 1)], _countof(shaderExports), shaderExports };
             }
 
@@ -520,6 +552,114 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
             subobjects[index++] = rayGenShaderRootSigAssociationObject;
         }
     }
+#pragma endregion
+
+#pragma region HitGroup creation - 2
+    if (m_hitGroups.size() > 1)
+    {
+        HitGroup hitGroup = m_hitGroups[1];
+        //Add state subobject for the Miss shader
+        {
+            D3D12_EXPORT_DESC msExportDesc = { hitGroup.missShader.name, hitGroup.missShader.exportToRename, D3D12_EXPORT_FLAG_NONE };
+
+            D3D12_DXIL_LIBRARY_DESC	msLibDesc = {};
+            msLibDesc.DXILLibrary.BytecodeLength = hitGroup.missShader.blob->GetBufferSize();
+            msLibDesc.DXILLibrary.pShaderBytecode = hitGroup.missShader.blob->GetBufferPointer();
+            msLibDesc.NumExports = 1;
+            msLibDesc.pExports = &msExportDesc;
+
+            D3D12_STATE_SUBOBJECT ms = { D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &msLibDesc };
+            subobjects[index++] = ms;
+        }
+
+        // Add state subobject for the Closest Hit shader
+        {
+            D3D12_EXPORT_DESC chsExportDesc = { hitGroup.hitShader.chs.name, hitGroup.hitShader.chs.exportToRename, D3D12_EXPORT_FLAG_NONE };
+
+            D3D12_DXIL_LIBRARY_DESC	chsLibDesc = {};
+            chsLibDesc.DXILLibrary.BytecodeLength = hitGroup.hitShader.chs.blob->GetBufferSize();
+            chsLibDesc.DXILLibrary.pShaderBytecode = hitGroup.hitShader.chs.blob->GetBufferPointer();
+            chsLibDesc.NumExports = 1;
+            chsLibDesc.pExports = &chsExportDesc;
+
+            D3D12_STATE_SUBOBJECT chs = { D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &chsLibDesc };
+            subobjects[index++] = chs;
+        }
+
+        // Add state subobject for the Any Hit shader
+        if (hitGroup.hitShader.ahs.name != nullptr)
+        {
+            D3D12_EXPORT_DESC ahsExportDesc = { hitGroup.hitShader.ahs.name, hitGroup.hitShader.ahs.exportToRename, D3D12_EXPORT_FLAG_NONE };
+
+            D3D12_DXIL_LIBRARY_DESC	ahsLibDesc = {};
+            ahsLibDesc.DXILLibrary.BytecodeLength = hitGroup.hitShader.ahs.blob->GetBufferSize();
+            ahsLibDesc.DXILLibrary.pShaderBytecode = hitGroup.hitShader.ahs.blob->GetBufferPointer();
+            ahsLibDesc.NumExports = 1;
+            ahsLibDesc.pExports = &ahsExportDesc;
+
+            D3D12_STATE_SUBOBJECT ahs = { D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, &ahsLibDesc };
+            subobjects[index++] = ahs;
+        }
+
+        // Add a state subobject for the hit group
+        {
+            D3D12_HIT_GROUP_DESC hitGroupDesc = {};
+            hitGroupDesc.ClosestHitShaderImport = hitGroup.hitShader.chs.name;
+            if (hitGroup.hitShader.ahs.name != nullptr) hitGroupDesc.AnyHitShaderImport = hitGroup.hitShader.ahs.name;
+            hitGroupDesc.HitGroupExport = hitGroup.hitGroupName;
+
+            D3D12_STATE_SUBOBJECT hitGroup = { D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, &hitGroupDesc };
+            subobjects[index++] = hitGroup;
+        }
+
+        // Add a state subobject for the shader payload configuration
+        {
+            D3D12_RAYTRACING_SHADER_CONFIG shaderDesc = { static_cast<UINT>(maxPayloadSize), D3D12_RAYTRACING_MAX_ATTRIBUTE_SIZE_IN_BYTES };
+            D3D12_STATE_SUBOBJECT shaderConfigObject = { D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, &shaderDesc };
+            subobjects[index++] = shaderConfigObject;
+        }
+
+        // Create a list of the shader export names that use the payload
+        {
+            D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION shaderPayloadAssociation = {};
+            if (hitGroup.hitShader.ahs.name != nullptr) {
+                const WCHAR* shaderExports[] = { hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
+                shaderPayloadAssociation = { &subobjects[(index - 1)], _countof(shaderExports), shaderExports };
+            }
+            else {
+                const WCHAR* shaderExports[] = { hitGroup.missShader.name, hitGroup.hitShader.chs.name };
+                shaderPayloadAssociation = { &subobjects[(index - 1)], _countof(shaderExports), shaderExports };
+            }
+
+            D3D12_STATE_SUBOBJECT shaderPayloadAssociationObject = { D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION, &shaderPayloadAssociation };
+            subobjects[index++] = shaderPayloadAssociationObject;
+        }
+
+        // Add a state subobject for the shared root signature 
+        {
+            D3D12_STATE_SUBOBJECT rayGenRootSigObject = { D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, &m_hitGroups[0].rayGenShader.pRootSignature };
+            subobjects[index++] = rayGenRootSigObject;
+        }
+
+        // Create a list of the shader export names that use the root signature
+        {
+            D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION rayGenShaderRootSigAssociation = {};
+            if (hitGroup.hitShader.ahs.name != nullptr)
+            {
+                const WCHAR* rootSigExports[] = { hitGroup.missShader.name, hitGroup.hitShader.chs.name, hitGroup.hitShader.ahs.name };
+                rayGenShaderRootSigAssociation = { &subobjects[(index - 1)], _countof(rootSigExports), rootSigExports };
+            }
+            else
+            {
+                const WCHAR* rootSigExports[] = { hitGroup.missShader.name, hitGroup.hitShader.chs.name };
+                rayGenShaderRootSigAssociation = { &subobjects[(index - 1)], _countof(rootSigExports), rootSigExports };
+            }
+
+            D3D12_STATE_SUBOBJECT rayGenShaderRootSigAssociationObject = { D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION, &rayGenShaderRootSigAssociation };
+            subobjects[index++] = rayGenShaderRootSigAssociationObject;
+        }
+    }
+#pragma endregion
 
     // Setup global root signature
     {

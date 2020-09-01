@@ -74,15 +74,14 @@ void RayGen()
 	
 	if (normalAndDepth.w == 0)
 	{
-        // Terminate if primary ray didn't hit anything
+        // Terminate if primary ray in g-buffer pass didn't hit anything
 		RTOutput[LaunchIndex] = float4(1.0f, 1.0f, 1.0f, 1.0f);
 		return;
 	}
 	
-	// Figure out pixel world space position (using length of a primary ray found in previous pass)
+	// Find primary ray origin and direction
 	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
 	float3 primaryRayDirection;
-	//GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection, g_sceneCB, g_cameraCB);
 	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection);
 	
 	// Calculate direction of raytracing for AO sample
@@ -94,7 +93,8 @@ void RayGen()
 	float ao = 0.0f;
 	RayDesc aoRay = { pixelWorldSpacePosition, g_aoCB.minT, worldDir, g_aoCB.aoRadius };
 	RayPayload payload;
-	payload.T = g_aoCB.aoRadius; //< Set T to "maximum", to produce no occlusion in case ray doesn't hit anything (miss shader won't modify this value)
+	// Set T to "maximum", no occlusion if ray doesn't hit anything 
+	payload.T = g_aoCB.aoRadius;
 
 	// Trace the ray
 	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, aoRay, payload);
@@ -103,7 +103,7 @@ void RayGen()
 	// Accumulate AO with previous frames
 	float prevAO = RTOutput[LaunchIndex].x;
 	ao = ((float) g_aoCB.accFrames * prevAO + ao) / ((float) g_aoCB.accFrames + 1.0f);
-	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, 1.0f); //< Replace all cached AO with current result
+	RTOutput[LaunchIndex.xy] = float4(ao, ao, ao, 1.0f);
 }
 
 [shader("miss")]

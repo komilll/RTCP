@@ -228,7 +228,7 @@ HWND Main::CreateWindow(const wchar_t* windowClassName, HINSTANCE hInst, const w
 
 void Main::EnableDebugLayer()
 {
-#if defined(_DEBUG)
+#if defined(_DEBUG_RTCP)
     ComPtr<ID3D12Debug> debugInterface;
     ThrowIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(&debugInterface)));
     debugInterface->EnableDebugLayer();

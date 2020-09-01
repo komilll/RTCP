@@ -104,7 +104,7 @@ private:
 	void InitializeRaytracingBufferValues();
 
 	// Functions called by PrepareRaytracingResources() - generating shaders
-	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = L"RayGen");
+	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = nullptr);
 	void CreateMissShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
 	void CreateClosestHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
 	void CreateAnyHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
@@ -125,6 +125,7 @@ private:
 	bool DO_RAYTRACING = true;
 	bool USE_AO_FRAME_JITTER = false;
 	bool USE_AO_THIN_LENS = false;
+	bool USE_DIFFUSE_GI_INDIRECT = true;
 
 	// Camera settings
 	XMFLOAT3 m_cameraPosition{ 0,0,0 };
@@ -180,6 +181,7 @@ private:
 	CBuffer<SceneConstantBuffer> m_sceneBuffer;
 	CBuffer<CameraConstantBuffer> m_cameraBuffer;
 	CBuffer<AoConstantBuffer> m_aoBuffer;
+	CBuffer<GiConstantBuffer> m_giBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBufferSkybox;
 
@@ -197,7 +199,7 @@ private:
 	
 #pragma region Raytracing variables
 	// Raytracing - resources containing all data for single raytracing shaders group
-	std::shared_ptr<RaytracingResources> m_raytracingNormal = NULL;
+	std::shared_ptr<RaytracingResources> m_raytracingGBuffer = NULL;
 	std::shared_ptr<RaytracingResources> m_raytracingAO = NULL;
 	std::shared_ptr<RaytracingResources> m_raytracingLambert = NULL;
 

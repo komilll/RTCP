@@ -6,9 +6,9 @@
 #include <Windows.h>
 #include <shellapi.h>
 
-#ifndef _DEBUG
-#define _DEBUG
-#endif // !_DEBUG
+#ifndef _DEBUG_RTCP
+#define _DEBUG_RTCP
+#endif // !_DEBUG_RTCP
 
 #if defined(min)
 #undef min

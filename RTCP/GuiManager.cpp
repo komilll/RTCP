@@ -31,6 +31,10 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
             m_renderer->m_resetFrameAO = true;
         }
 
+        if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_DIFFUSE_GI_INDIRECT)) {
+            /*m_renderer->m_giBuffer. = true;*/
+        }
+
         // Camera position/rotation
         char camPosText[100];
         char camRotText[100];
