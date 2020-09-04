@@ -10,7 +10,7 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
     ImGui::NewFrame();
 
     {
-        ImGui::Begin("Hello, world!");
+        ImGui::Begin("Raytracing settings");
         if (ImGui::SliderFloat("AO Radius", &m_renderer->m_aoBuffer.value.aoRadius, 0.0f, 50.0f, "%.2f")) {
             m_renderer->m_resetFrameAO = true;
         }
@@ -32,10 +32,65 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
         }
 
         if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_DIFFUSE_GI_INDIRECT)) {
-            /*m_renderer->m_giBuffer. = true;*/
+            m_renderer->m_resetFrameGI = true;
         }
 
         ImGui::Text(m_renderer->m_profiler->GetOutputString());
+
+        // Lights section
+        ImGui::Text("Light settings:");
+        if (ImGui::Button("Create light in camera pos"))
+        {
+            Light light{};
+            light.type = LightType::Point;
+            light.position = XMFLOAT3{ m_renderer->m_cameraPosition.x, m_renderer->m_cameraPosition.y, m_renderer->m_cameraPosition.z };
+            light.rotation = XMFLOAT3{ m_renderer->m_cameraRotation.x, m_renderer->m_cameraRotation.y, m_renderer->m_cameraRotation.z };
+            light.color = XMFLOAT4{ 1,1,1,1 };
+            m_renderer->m_lightSettings->AddLight(light);
+            m_renderer->m_updateLightCount = true;
+        }
+
+        auto& lightsInfo = m_renderer->m_lightSettings->GetLightsInfo();
+        for (int i = 0; i < lightsInfo.size(); ++i)
+        {
+            std::string name = "Light #" + std::to_string(i);
+            if (ImGui::CollapsingHeader(name.c_str()))
+            {
+                char pos[100];
+                char rot[100];
+                char color[100];
+
+                sprintf_s(pos, "Pos: (%.2f, %.2f, %.2f)", lightsInfo[i].position.x, lightsInfo[i].position.y, lightsInfo[i].position.z);
+                sprintf_s(rot, "Rot: (%.2f, %.2f, %.2f)", lightsInfo[i].rotation.x, lightsInfo[i].rotation.y, lightsInfo[i].rotation.z);
+                sprintf_s(color, "Color: (%.2f, %.2f, %.2f, %.2f)", lightsInfo[i].color.x, lightsInfo[i].color.y, lightsInfo[i].color.z, lightsInfo[i].color.w);
+
+                ImGui::Text(pos);
+                ImGui::Text(rot);
+                ImGui::Text(color);
+
+                std::string deleteName = "Delete " + name;
+                if (ImGui::Button(deleteName.c_str()))
+                {
+                    m_renderer->m_lightSettings->RemoveLight(i);
+                    m_renderer->m_updateLightCount = true;
+                    break;
+                }
+
+                std::string colorPickerHeaderName = "Color picker " + name;
+                if (ImGui::CollapsingHeader(colorPickerHeaderName.c_str()))
+                {
+                    std::string colorPickerName = "Color picker - picker " + name;
+                    float colors[4] = { lightsInfo[i].color.x, lightsInfo[i].color.y, lightsInfo[i].color.z, lightsInfo[i].color.w };
+                    if (ImGui::ColorPicker4(colorPickerName.c_str(), colors))
+                    {
+                        lightsInfo[i].color = XMFLOAT4{ colors[0], colors[1], colors[2], colors[3] };
+                        m_renderer->m_updateLightCount = true;
+                    }
+                }
+            }
+        }
+
+        ImGui::Separator();
 
         // Camera position/rotation
         char camPosText[100];

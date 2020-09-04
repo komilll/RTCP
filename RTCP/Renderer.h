@@ -13,6 +13,7 @@
 #include "RaytracingShadersHelper.h"
 #include "RaytracingResources.h"
 #include "Profiler.h"
+#include "LightSettings.h"
 
 using namespace DirectX;
 typedef std::array<D3D12_INPUT_ELEMENT_DESC, 6> BasicInputLayout;
@@ -105,6 +106,7 @@ private:
 
 	// Functions called by PrepareRaytracingResources() - generating shaders
 	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = nullptr);
+	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, std::vector<D3D12_DESCRIPTOR_RANGE> ranges, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = nullptr);
 	void CreateMissShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
 	void CreateClosestHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
 	void CreateAnyHitShader(HitProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
@@ -138,13 +140,18 @@ private:
 	XMFLOAT3 m_cameraRotation{ 0,0,0 };
 	XMFLOAT3 m_cameraPositionStoredInFrame{ 0,0,0 };
 
+	// Light settings
+	std::unique_ptr<LightSettings> m_lightSettings;
+
 	// Random number generator
 	std::uniform_real_distribution<float> m_rngDist;
 	std::mt19937 m_rng;
 
 	// Helper variables
 	bool m_resetFrameAO = false;
+	bool m_resetFrameGI = false;
 	bool m_resetFrameProfiler = false;
+	bool m_updateLightCount = false;
 	UINT m_rtvDescriptorSize = 0;
 
 	// Pipeline variables - device, commandQueue, swap chain
@@ -191,6 +198,7 @@ private:
 	CBuffer<GiConstantBuffer> m_giBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBufferSkybox;
+	CBuffer<LightConstantBuffer> m_lightBuffer;
 
 	// Textures
 	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];

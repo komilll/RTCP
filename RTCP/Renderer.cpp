@@ -55,6 +55,10 @@ void Renderer::OnInit(HWND hwnd)
 
     m_profiler = std::shared_ptr<Profiler>(new Profiler());
     m_profiler->Initialize(m_device.Get(), m_frameCount);
+
+    m_lightSettings = std::unique_ptr<LightSettings>(new LightSettings());
+    m_lightSettings->LoadLightFromFile();
+    m_updateLightCount = true;
 }
 
 void Renderer::OnUpdate()
@@ -145,7 +149,41 @@ void Renderer::OnUpdate()
     // Update gi buffer
     {
         m_giBuffer.value.useIndirect = USE_DIFFUSE_GI_INDIRECT ? 1 : 0;
+        if (m_resetFrameGI) {
+            m_resetFrameGI = false;
+            m_giBuffer.value.accFrames = 0;
+        }
+        else {
+            m_giBuffer.value.accFrames++;
+        }
         m_giBuffer.Update();
+    }
+
+    // Update lights buffer
+    {
+        if (m_updateLightCount)
+        {
+            m_updateLightCount = false;
+
+            auto lightsInfo = m_lightSettings->GetLightsInfo();
+            // Use first element as array size indicator
+            //m_lightBuffer.values[0].type = static_cast<int>(lightsInfo.size());
+
+            for (int i = 0; i < std::min(static_cast<int>(lightsInfo.size()), 15); ++i)
+            {
+                m_lightBuffer.value.lightDiffuseColor[i] = lightsInfo[i].color;
+                m_lightBuffer.value.lightPositionAndType[i] = XMFLOAT4{ lightsInfo[i].position.x, lightsInfo[i].position.y, lightsInfo[i].position.z, static_cast<float>(lightsInfo[i].type) };
+            }
+            for (int i = static_cast<int>(lightsInfo.size()); i < std::min(static_cast<int>(m_lightBuffer.elementCount), 15); ++i)
+            {
+                m_lightBuffer.value.lightDiffuseColor[i] = XMFLOAT4{ 0,0,0,0 };
+                m_lightBuffer.value.lightPositionAndType[i] = XMFLOAT4{ 0,0,0,0 };
+            }
+            m_lightBuffer.value.lightPositionAndType[15].w = static_cast<float>(std::min(static_cast<int>(lightsInfo.size()), 15));
+            m_lightBuffer.Update();
+
+            m_lightSettings->SaveLightToFile();
+        }
     }
 }
 
@@ -166,6 +204,7 @@ void Renderer::AddCameraPosition(float x, float y, float z)
         m_cameraPositionStoredInFrame.z = z;
         CreateViewAndPerspective();
         m_resetFrameAO = true;
+        m_resetFrameGI = true;
         m_resetFrameProfiler = true;
     }
 }
@@ -191,6 +230,7 @@ void Renderer::AddCameraRotation(float x, float y, float z)
 
         CreateViewAndPerspective();
         m_resetFrameAO = true;
+        m_resetFrameGI = true;
         m_resetFrameProfiler = true;
     }
 }
@@ -493,19 +533,19 @@ void Renderer::PopulateCommandList()
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
-        // Set the UAV/SRV/CBV and sampler heaps
-        ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingGBuffer->GetDescriptorHeap().Get() };
-        m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+        /* RT G-BUFFER ALGORITHM */
+        {
+            ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingGBuffer->GetDescriptorHeap().Get() };
+            m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-        ComPtr<ID3D12StateObject> rtpso = m_raytracingGBuffer->GetRTPSO();
-        D3D12_DISPATCH_RAYS_DESC desc = m_raytracingGBuffer->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
-        m_commandList->SetPipelineState1(rtpso.Get());
-        m_commandList->DispatchRays(&desc);
-
-        /* RTAO NOISE ALGORITHM */
+            ComPtr<ID3D12StateObject> rtpso = m_raytracingGBuffer->GetRTPSO();
+            D3D12_DISPATCH_RAYS_DESC desc = m_raytracingGBuffer->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
+            m_commandList->SetPipelineState1(rtpso.Get());
+            m_commandList->DispatchRays(&desc);
+        }
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
-         //Set the UAV/SRV/CBV and sampler heaps
+        /* RTAO ALGORITHM */
         {
             ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingAO->GetDescriptorHeap().Get() };
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -520,8 +560,7 @@ void Renderer::PopulateCommandList()
         m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtAoTexture.Get());
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
-        /* RTAO LAMBERT ALGORITHM */
-        //Set the UAV/SRV/CBV and sampler heaps
+        /* RT LAMBERT ALGORITHM */
         {
             ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingLambert->GetDescriptorHeap().Get() };
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -950,7 +989,7 @@ void Renderer::PrepareRaytracingResources(const std::shared_ptr<ModelClass> mode
     HitProgram hitShader;
 
     std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
-    samplers[0].Init(0, D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR);
+    samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
 
     CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", 2, 2, 5, samplers, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"Miss");
@@ -1008,28 +1047,26 @@ void Renderer::PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> mo
 
 void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClass> model)
 {
-    RtProgram rayGenShader{};
-    RtProgram missShader;
+    RtProgram rayGenShader, missShader;
     HitProgram hitShader;
 
-    RtProgram missShader_new{};
-    HitProgram hitShader_new{};
+    RtProgram missShader_new;
+    HitProgram hitShader_new;
     
     std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
-    samplers[0].Init(0, D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR);
+    samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 3, 1, 6, samplers, L"RayGen");
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 4, 1, 6, samplers, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"Miss");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHit");
 
-    //CreateRayGenShader(rayGenShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 2, 1, 5, {}, L"RayGen_Lambert_new");
-    CreateMissShader(missShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian_Indirect.hlsl", L"MissIndirect");
-    CreateClosestHitShader(hitShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian_Indirect.hlsl", L"ClosestHitIndirect");
+    CreateMissShader(missShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"MissIndirect");
+    CreateClosestHitShader(hitShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHitIndirect");
 
     HitGroup group = { rayGenShader, missShader, hitShader, L"GroupLambert" };
     HitGroup group_new = { rayGenShader, missShader_new, hitShader_new, L"GroupLambert_new" };
 
-    m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, group_new }));
+    m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, group_new}));
 
     std::vector<TextureWithDesc> textures{};
     CreateTexture2D(m_rtLambertTexture, m_windowWidth, m_windowHeight);
@@ -1042,19 +1079,19 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, normalDesc } });
     textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, srvDesc } });
 
-    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(nullptr), GetVertexBufferSRVDesc(nullptr, sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer);
+    D3D12_SHADER_RESOURCE_VIEW_DESC skyboxDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+    skyboxDesc.TextureCube.MipLevels = 1;
+    skyboxDesc.TextureCube.MostDetailedMip = 0;
+    textures.push_back({ TextureWithDesc{m_skyboxTexture, skyboxDesc } });
+
+    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(nullptr), GetVertexBufferSRVDesc(nullptr, sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
 {
-    // Load and compile the ray generation shader
-    shader = RtProgram(D3D12ShaderInfo(path, L"", L"lib_6_3"));
-    shader.name = name;
-    shader.exportToRename = nameToExport;
-    Compile_Shader(shaderCompiler, shader);
-
     // Describe the ray generation root signature
-    D3D12_DESCRIPTOR_RANGE ranges[3];
+    std::vector<D3D12_DESCRIPTOR_RANGE> ranges;
+    ranges.resize(3);
 
     ranges[0].BaseShaderRegister = 0;
     ranges[0].NumDescriptors = cbvDescriptors;
@@ -1074,11 +1111,22 @@ void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& sh
     ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     ranges[2].OffsetInDescriptorsFromTableStart = cbvDescriptors + uavDescriptors;
 
+    CreateRayGenShader(shader, shaderCompiler, path, ranges, samplers, name, nameToExport);
+}
+
+void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, std::vector<D3D12_DESCRIPTOR_RANGE> ranges, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
+{
+    // Load and compile the ray generation shader
+    shader = RtProgram(D3D12ShaderInfo(path, L"", L"lib_6_3"));
+    shader.name = name;
+    shader.exportToRename = nameToExport;
+    Compile_Shader(shaderCompiler, shader);
+
     CD3DX12_ROOT_PARAMETER param0 = {};
     param0.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     param0.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-    param0.DescriptorTable.NumDescriptorRanges = _countof(ranges);
-    param0.DescriptorTable.pDescriptorRanges = ranges;
+    param0.DescriptorTable.NumDescriptorRanges = static_cast<UINT>(ranges.size());
+    param0.DescriptorTable.pDescriptorRanges = &ranges[0];
 
     CD3DX12_ROOT_PARAMETER rootParams[1]{ param0 };
 
@@ -1192,7 +1240,5 @@ void Renderer::Compile_Shader(LPCWSTR pFileName, const D3D_SHADER_MACRO* pDefine
 
 void Renderer::InitializeRaytracingBufferValues()
 {
-    m_sceneBuffer.value.lightPosition = XMFLOAT4(-3.5f, 2.5f, -2.6f, 0.0f);
-    m_sceneBuffer.value.lightAmbientColor = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-    m_sceneBuffer.value.lightDiffuseColor = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+
 }

@@ -20,7 +20,14 @@ struct PayloadIndirect
 struct GiConstantBuffer
 {
 	int useIndirect;
-	float padding[63];
+	int accFrames;
+	float padding[62];
+};
+
+struct LightConstantBuffer
+{
+	float4 lightDiffuseColor[16];
+	float4 lightPositionAndType[16];
 };
 
 ////
@@ -29,6 +36,7 @@ struct GiConstantBuffer
 ConstantBuffer<SceneConstantBuffer> g_sceneCB : register(b0);
 ConstantBuffer<CameraConstantBuffer> g_cameraCB : register(b1);
 ConstantBuffer<GiConstantBuffer> g_giCB : register(b2);
+ConstantBuffer<LightConstantBuffer> g_lightCB : register(b3);
 
 RWTexture2D<float4> RTOutput : register(u0);
 
@@ -45,13 +53,13 @@ SamplerState g_sampler : register(s0);
 float3 shootIndirectRay(float3 rayOrigin, float3 rayDir, float minT, uint seed)
 {
 	// Setup shadow ray
-	RayDesc rayColor = { rayOrigin, minT, rayDir, 1e+38f };;
+	RayDesc rayColor = { rayOrigin, minT, rayDir, 1e+38f };
 	
 	PayloadIndirect payload;
 	payload.color = float3(0, 0, 0);
 	payload.rndSeed = seed;
-
-	TraceRay(SceneBVH, 0, 0xFF, 0, 1, 1, rayColor, payload);
+	
+	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 1, 2, 1, rayColor, payload);
 
 	return payload.color;
 }
@@ -86,51 +94,40 @@ void RayGen()
 		return;
 	}
 	
-	float3 shadeColor = albedo.xyz;
-	// Lambert lighting
+	float3 shadeColor = albedo.rgb;
+	float lightsCount = g_lightCB.lightPositionAndType[15].w;
+	if (lightsCount > 0)
 	{
-		float3 lightColor = g_sceneCB.lightDiffuseColor.rgb;
-		float3 toLight = g_sceneCB.lightPosition.xyz - pixelWorldSpacePosition;
+		uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount);
+		int lightToSample = min(int(nextRand(seed) * lightsCount), lightsCount - 1);
+		
+		float3 lightColor = g_lightCB.lightDiffuseColor[lightToSample].rgb;
+		float3 toLight = g_lightCB.lightPositionAndType[lightToSample].xyz - pixelWorldSpacePosition;
 		float distToLight = length(toLight);
 		toLight = normalize(toLight);
 		float NoL = saturate(dot(normalAndDepth.xyz, toLight));
-	
-		float visibility = shadowRayVisibility(pixelWorldSpacePosition, toLight, 1e-4f, distToLight);
+			
+		float shadowMult = shadowRayVisibility(pixelWorldSpacePosition, toLight, 1e-4f, distToLight);
 		
-		shadeColor += visibility * NoL * lightColor;
+		if (g_giCB.useIndirect == 1)
+		{
+			float3 bounceDir = getCosHemisphereSample(seed, normalAndDepth.xyz);
+			float NoDir = saturate(dot(normalAndDepth.xyz, bounceDir));
+			float3 bounceColor = shootIndirectRay(pixelWorldSpacePosition, bounceDir, 1e-4f, seed);
+			float sampleProb = NoDir / PI;
+			shadeColor += (NoDir * bounceColor * albedo.rgb / PI) / sampleProb;
+		}
+		else
+		{
+			shadeColor += shadowMult * NoL * lightColor / PI;
+		}
 	}
 	shadeColor *= albedo.rgb / PI;
 	
-	//if (g_giCB.useIndirect)
-	//{
-	//	// Select a random direction for our diffuse interreflection ray.
-	//	float3 bounceDir;
-	//	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount);
-		
-	////	//if (gCosSampling)
-	//	bounceDir = getCosHemisphereSample(seed, normalAndDepth.xyz); // Use cosine sampling
-	////	//else
-	////	//	bounceDir = getUniformHemisphereSample(randSeed, worldNorm.xyz);  // Use uniform random samples
-
-	////	// Get NdotL for our selected ray direction
-	//	float NdotL = saturate(dot(normalAndDepth.xyz, bounceDir));
-
-	////	// Shoot our indirect global illumination ray
-	//	float3 bounceColor = shootIndirectRay(pixelWorldSpacePosition.xyz, bounceDir, 1e-4f, seed);
-
-	////	//bounceColor = (NdotL > 0.50f) ? float3(0, 0, 0) : bounceColor;
-
-	////	// Probability of selecting this ray ( cos/pi for cosine sampling, 1/2pi for uniform sampling )
-	//	float sampleProb = (NdotL / PI);
-
-	////	// Accumulate the color.  For performance, terms could (and should) be cancelled here.
-	////	//shadeColor += (NdotL * bounceColor * difMatlColor.rgb / M_PI) / sampleProb;
-
-	//	shadeColor += (NdotL * bounceColor * albedo.rgb / PI) / sampleProb;
-	//	shadeColor = bounceColor;
-	//}
-	
-	RTOutput[LaunchIndex] = float4(shadeColor, 1.0f);
+	float4 prevScene = RTOutput[LaunchIndex];
+	float4 finalColor = float4(shadeColor, 1.0f);
+	finalColor = ((float) g_giCB.accFrames * prevScene + finalColor) / ((float) g_giCB.accFrames + 1.0f);
+	RTOutput[LaunchIndex] = finalColor;
 }
 
 [shader("miss")]
@@ -140,9 +137,84 @@ void Miss(inout RayPayload payload : SV_RayPayload)
 }
 
 [shader("closesthit")]
-void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void ClosestHit(inout PayloadIndirect payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
+	float3 hitPos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 	
+	uint indexSizeInBytes = 4;
+	uint indicesPerTriangle = 3;
+	uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+	uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+	
+	const uint3 indices_ = indices.Load3(baseIndex);
+	float3 vertexNormals[3] =
+	{
+		vertices[indices_[0]].normal,
+		vertices[indices_[1]].normal,
+		vertices[indices_[2]].normal
+	};
+	float3 triangleNormal = HitAttribute(vertexNormals, attribs);
+	
+	//
+	float lightsCount = g_lightCB.lightPositionAndType[15].w;
+	int lightToSample = min(int(nextRand(payload.rndSeed) * lightsCount), lightsCount - 1);
+	
+	float3 lightColor = g_lightCB.lightDiffuseColor[lightToSample].rgb;
+	float3 toLight = g_lightCB.lightPositionAndType[lightToSample].xyz - hitPos;
+	float distToLight = length(toLight);
+	toLight = normalize(toLight);
+	float NoL = saturate(dot(triangleNormal.xyz, toLight));
+	
+	float visibility = shadowRayVisibility(hitPos, toLight, 1e-4f, 1e+38f);
+	//float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
+
+	//payload.color = visibility * NoL * lightColor * albedo.xyz / PI;
+	payload.color = triangleNormal;
+}
+
+[shader("miss")]
+void MissIndirect(inout PayloadIndirect payload : SV_RayPayload)
+{
+	float3 rayDir = WorldRayDirection();
+	rayDir.z = -rayDir.z;
+	
+	//payload.color = skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+}
+
+[shader("closesthit")]
+void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+	float3 hitPos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+	
+	uint indexSizeInBytes = 4;
+	uint indicesPerTriangle = 3;
+	uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
+	uint baseIndex = PrimitiveIndex() * triangleIndexStride;
+	
+	const uint3 indices_ = indices.Load3(baseIndex);
+	float3 vertexNormals[3] =
+	{
+		vertices[indices_[0]].normal,
+		vertices[indices_[1]].normal,
+		vertices[indices_[2]].normal
+	};
+	float3 triangleNormal = HitAttribute(vertexNormals, attribs);
+	
+	//
+	float lightsCount = g_lightCB.lightPositionAndType[15].w;
+	int lightToSample = min(int(nextRand(payload.rndSeed) * lightsCount), lightsCount - 1);
+	
+	float3 lightColor = g_lightCB.lightDiffuseColor[lightToSample].rgb;
+	float3 toLight = g_lightCB.lightPositionAndType[lightToSample].xyz - hitPos;
+	float distToLight = length(toLight);
+	toLight = normalize(toLight);
+	float NoL = saturate(dot(triangleNormal.xyz, toLight));
+	
+	float visibility = shadowRayVisibility(hitPos, toLight, 1e-4f, 1e+38f);
+	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
+
+	//payload.color = visibility * NoL * lightColor * albedo.xyz / PI;
+	payload.color = visibility; // * lightColor * albedo.rgb / PI;;
 }
 
 #endif //_RT_LAMBERTIAN_HLSL_

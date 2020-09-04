@@ -84,19 +84,12 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 	
 	float2 uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
 	payload.albedo = float4(albedoTex.SampleLevel(g_sampler, float3(uv, vertices[indices_[0]].textureID), 0).xyz, 1);
-	//payload.albedo = float4(textureIdColors[vertices[indices_[0]].textureID % 16], 1);
-	//payload.albedo = float4((float) vertices[indices_[0]].textureID / 36, 0, 0, 1);
 }
 
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-	uint2 LaunchIndex = DispatchRaysIndex().xy;
-	uint2 LaunchDimensions = DispatchRaysDimensions().xy;
-	float3 rayDir;
-	float3 origin = g_sceneCB.cameraPosition.xyz;
-	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, origin, rayDir);
-	
+	float3 rayDir = WorldRayDirection();
 	rayDir.z = -rayDir.z;
 	
 	payload.albedo = float4(skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb, 0);

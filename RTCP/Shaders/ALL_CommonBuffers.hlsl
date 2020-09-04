@@ -27,12 +27,9 @@ struct SceneConstantBuffer
 {
 	matrix projectionToWorld;
 	float4 cameraPosition;
-	float4 lightPosition;
-	float4 lightAmbientColor;
-	float4 lightDiffuseColor;
-	
+
 	int frameCount;
-	float padding[31];
+	float padding[43];
 };
 ////
 

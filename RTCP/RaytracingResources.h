@@ -31,7 +31,12 @@ public:
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
 };
 
-typedef std::pair<ComPtr<ID3D12Resource>, std::size_t> ResourceWithSize;
+struct ResourceWithSize
+{
+public:
+	ComPtr<ID3D12Resource> resource;
+	std::size_t size;
+};
 
 class RaytracingResources
 {
@@ -93,26 +98,29 @@ private:
 };
 #endif // !_RAYTRACING_RESOURCES_H_
 
-template<typename T1, typename T2, typename T3>
-inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, std::array<bool, 3> isUAV = {}, size_t maxPayloadSize = sizeof(float) * 4)
-{
-	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, cb3, isUAV, maxPayloadSize);
-};
-
 template<typename T1, typename T2>
 inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, std::array<bool, 2> isUAV = {}, size_t maxPayloadSize = sizeof(float) * 4)
 {
 	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, isUAV, maxPayloadSize);
 }
 
+template<typename T1, typename T2, typename T3>
+inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, std::array<bool, 3> isUAV = {}, size_t maxPayloadSize = sizeof(float) * 4)
+{
+	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, cb3, isUAV, maxPayloadSize);
+};
+
+template<typename T1, typename T2, typename T3, typename T4>
+inline void CreateRaytracingPipeline(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, CBuffer<T4>& cb4, std::array<bool, 4> isUAV = {}, size_t maxPayloadSize = sizeof(float) * 4)
+{
+	CreateUploadBuffers(raytracingResources, device, model, texturesWithDesc, indexDesc, vertexDesc, cb1, cb2, cb3, cb4, isUAV, maxPayloadSize);
+};
+
 template <typename T1, typename T2>
 inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, std::array<bool, 2> isUAV, size_t maxPayloadSize)
 {
-    // Create view buffer and material buffer
-    {
-        CreateUploadHeapRTCP(device, cb1);
-        CreateUploadHeapRTCP(device, cb2);
-    }
+    CreateUploadHeapRTCP(device, cb1);
+    CreateUploadHeapRTCP(device, cb2);
 
 	std::vector<ResourceWithSize> v{};
 	v.push_back({ cb1.resource, sizeof(cb1.value) });
@@ -124,17 +132,31 @@ inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12
 template <typename T1, typename T2, typename T3>
 inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, std::array<bool, 3> isUAV, size_t maxPayloadSize)
 {
-	// Create view buffer and material buffer
-	{
-		CreateUploadHeapRTCP(device, cb1);
-		CreateUploadHeapRTCP(device, cb2);
-		CreateUploadHeapRTCP(device, cb3);
-	}
+	CreateUploadHeapRTCP(device, cb1);
+	CreateUploadHeapRTCP(device, cb2);
+	CreateUploadHeapRTCP(device, cb3);
 
 	std::vector<ResourceWithSize> v{};
 	v.push_back({ cb1.resource, sizeof(cb1.value) });
 	v.push_back({ cb2.resource, sizeof(cb2.value) });
 	v.push_back({ cb3.resource, sizeof(cb3.value) });
+
+	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v, std::vector<bool>{isUAV.begin(), isUAV.end()}, maxPayloadSize);
+}
+
+template <typename T1, typename T2, typename T3, typename T4>
+inline void CreateUploadBuffers(RaytracingResources* raytracingResources, ID3D12Device5* device, ModelClass* model, std::vector<TextureWithDesc> texturesWithDesc, D3D12_SHADER_RESOURCE_VIEW_DESC indexDesc, D3D12_SHADER_RESOURCE_VIEW_DESC vertexDesc, CBuffer<T1>& cb1, CBuffer<T2>& cb2, CBuffer<T3>& cb3, CBuffer<T4>& cb4, std::array<bool, 4> isUAV, size_t maxPayloadSize)
+{
+	CreateUploadHeapRTCP(device, cb1);
+	CreateUploadHeapRTCP(device, cb2);
+	CreateUploadHeapRTCP(device, cb3);
+	CreateUploadHeapRTCP(device, cb4);
+
+	std::vector<ResourceWithSize> v{};
+	v.push_back({ cb1.resource, sizeof(cb1.value) });
+	v.push_back({ cb2.resource, sizeof(cb2.value) });
+	v.push_back({ cb3.resource, sizeof(cb3.value) });
+	v.push_back({ cb4.resource, sizeof(cb4.value) });
 
 	raytracingResources->CreateRaytracingPipelineContinue(device, model, texturesWithDesc, indexDesc, vertexDesc, v, std::vector<bool>{isUAV.begin(), isUAV.end()}, maxPayloadSize);
 }

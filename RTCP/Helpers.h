@@ -38,11 +38,21 @@ template<class T>
 inline void CreateUploadHeapRTCP(ID3D12Device5* device, CBuffer<T>& cbuffer)
 {
     ThrowIfFailed(device->CreateCommittedResource(
-        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer((sizeof(T) + 255) & ~255), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&cbuffer.resource)
+        &CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer((sizeof(T) * (cbuffer.elementCount > 0 ? cbuffer.elementCount : 1) + 255) & ~255), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&cbuffer.resource)
     ));
 
-    CD3DX12_RANGE readRange(0, 0);
-    ThrowIfFailed(cbuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&cbuffer.ptr)));
-    memcpy(cbuffer.ptr, &cbuffer.value, sizeof(T));
-    cbuffer.resource->Unmap(0, &readRange);
+    if (cbuffer.elementCount > 0)
+    {
+        CD3DX12_RANGE readRange(0, 0);
+        ThrowIfFailed(cbuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&cbuffer.ptr)));
+        memcpy(cbuffer.ptr, &cbuffer.values[0], sizeof(T) * cbuffer.elementCount);
+        cbuffer.resource->Unmap(0, &readRange);
+    }
+    else
+    {
+        CD3DX12_RANGE readRange(0, 0);
+        ThrowIfFailed(cbuffer.resource->Map(0, &readRange, reinterpret_cast<void**>(&cbuffer.ptr)));
+        memcpy(cbuffer.ptr, &cbuffer.value, sizeof(T));
+        cbuffer.resource->Unmap(0, &readRange);
+    }
 }

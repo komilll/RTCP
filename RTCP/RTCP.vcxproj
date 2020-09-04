@@ -161,6 +161,7 @@
     <ClInclude Include="GuiManager.h" />
     <ClInclude Include="Helpers.h" />
     <ClInclude Include="InputManager.h" />
+    <ClInclude Include="LightSettings.h" />
     <ClInclude Include="Main.h" />
     <ClInclude Include="ModelClass.h" />
     <ClInclude Include="pch.h" />
@@ -179,6 +180,7 @@
     <ClCompile Include="External\imgui\imgui_widgets.cpp" />
     <ClCompile Include="GuiManager.cpp" />
     <ClCompile Include="InputManager.cpp" />
+    <ClCompile Include="LightSettings.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="ModelClass.cpp" />
     <ClCompile Include="Profiler.cpp" />
@@ -203,9 +205,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
     <FxCompile Include="Shaders\RT_Lambertian.hlsl">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-    </FxCompile>
-    <FxCompile Include="Shaders\RT_Lambertian_Indirect.hlsl">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </FxCompile>
     <FxCompile Include="Shaders\SamplingHelper.hlsl">

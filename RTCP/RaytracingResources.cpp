@@ -255,7 +255,7 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
                         handle.ptr += handleIncrement;
                     }
 
-                    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[i].first->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, static_cast<UINT>(buffersWithSize[i].second)) };
+                    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { buffersWithSize[i].resource->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, static_cast<UINT>(buffersWithSize[i].size)) };
                     device->CreateConstantBufferView(&cbvDesc, handle);
                     firstPassed = true;
                 }
@@ -286,13 +286,13 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
                 //uavDesc.Buffer.CounterOffsetInBytes = 0;
                 //uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
                 
-                UINT size = static_cast<UINT>(buffersWithSize[i].second);
+                UINT size = static_cast<UINT>(buffersWithSize[i].size);
                 UINT64 bufferSize = size;
                 auto uavDesc = CD3DX12_RESOURCE_DESC::Buffer(bufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
                 auto defaultHeapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 
                 ThrowIfFailed(device->CreateCommittedResource(
-                    &defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&buffersWithSize[i].first)
+                    &defaultHeapProperties, D3D12_HEAP_FLAG_NONE, &uavDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&buffersWithSize[i].resource)
                 ));
 
                 D3D12_UNORDERED_ACCESS_VIEW_DESC uavViewDesc = {};
@@ -303,7 +303,7 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
                 uavViewDesc.Format = DXGI_FORMAT_UNKNOWN;
                 uavViewDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
 
-                device->CreateUnorderedAccessView(buffersWithSize[i].first.Get(), nullptr, &uavViewDesc, handle);
+                device->CreateUnorderedAccessView(buffersWithSize[i].resource.Get(), nullptr, &uavViewDesc, handle);
             }
         }
 
@@ -356,7 +356,7 @@ The entry size must be aligned up to D3D12_RAYTRACING_SHADER_BINDING_TABLE_RECOR
     m_shaderTableStruct.raygenSize = 64;
     m_shaderTableStruct.missStride = 32;
     m_shaderTableStruct.hitStride = 64;
-    m_shaderTableStruct.missSize = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, m_shaderTableStruct.missStride * static_cast<uint32_t>(m_hitGroups.size());
+    m_shaderTableStruct.missSize = m_shaderTableStruct.missStride * static_cast<uint32_t>(m_hitGroups.size());
     m_shaderTableStruct.hitSize = m_shaderTableStruct.hitStride * static_cast<uint32_t>(m_hitGroups.size());
 
     uint32_t shaderIdSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
@@ -431,8 +431,42 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
         size += 2; // payload + association
         size += 2; // local root + association
     }
-    size += 2; // global root + pipeline config
+    size += 3; // global root + local root + pipeline config
     subobjects.resize(size);
+
+    ID3D12RootSignature* dummyLocalRootSignature;
+    ID3D12RootSignature* dummyGlobalRootSignature;
+    // Create dummy local root signature
+    {
+        HRESULT hr = 0;
+        D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
+        rootDesc.NumParameters = 0;
+        rootDesc.pParameters = nullptr;
+        rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+        ID3DBlob* serializedRootSignature;
+        ID3DBlob* error;
+
+        // Create the global root signature
+        ThrowIfFailed(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSignature, &error));
+
+        ThrowIfFailed(device->CreateRootSignature(0, serializedRootSignature->GetBufferPointer(),
+            serializedRootSignature->GetBufferSize(),
+            IID_PPV_ARGS(&dummyGlobalRootSignature)));
+
+        serializedRootSignature->Release();
+
+        rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE;
+        // Create the local root signature, reusing the same descriptor but altering the creation flag
+        ThrowIfFailed(D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSignature, &error));
+
+        ThrowIfFailed(device->CreateRootSignature(0, serializedRootSignature->GetBufferPointer(),
+            serializedRootSignature->GetBufferSize(),
+            IID_PPV_ARGS(&dummyLocalRootSignature)));
+
+        serializedRootSignature->Release();
+    }
 
 #pragma region HitGroup creation - 1
     {
@@ -544,7 +578,7 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
             }
             else
             {
-                const WCHAR* rootSigExports[] = { m_hitGroups[0].rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
+                const WCHAR* rootSigExports[] = { hitGroup.rayGenShader.name, hitGroup.missShader.name, hitGroup.hitShader.chs.name };
                 rayGenShaderRootSigAssociation = { &subobjects[(index - 1)], _countof(rootSigExports), rootSigExports };
             }
 
@@ -637,7 +671,7 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
 
         // Add a state subobject for the shared root signature 
         {
-            D3D12_STATE_SUBOBJECT rayGenRootSigObject = { D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, &m_hitGroups[0].rayGenShader.pRootSignature };
+            D3D12_STATE_SUBOBJECT rayGenRootSigObject = { D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, &hitGroup.rayGenShader.pRootSignature };
             subobjects[index++] = rayGenRootSigObject;
         }
 
@@ -663,13 +697,19 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
 
     // Setup global root signature
     {
-        D3D12_STATE_SUBOBJECT globalRootSig = { D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, &m_hitGroups[0].missShader.pRootSignature };
+        D3D12_STATE_SUBOBJECT globalRootSig = { D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, &dummyGlobalRootSignature };
         subobjects[index++] = globalRootSig;
+    }
+
+    // The pipeline construction always requires an empty local root signature
+    {
+        D3D12_STATE_SUBOBJECT localRootSig = { D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE, &dummyLocalRootSignature };
+        subobjects[index++] = localRootSig;
     }
 
     // Add a state subobject for the ray tracing pipeline config
     {
-        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig = { 1 }; // Max Trace Recursion Depth
+        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig = { 2 }; // Max Trace Recursion Depth
         D3D12_STATE_SUBOBJECT pipelineConfigObject = { D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, &pipelineConfig };
         subobjects[index++] = pipelineConfigObject; 
     }

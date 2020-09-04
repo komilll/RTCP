@@ -99,6 +99,9 @@
     <ClInclude Include="Profiler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LightSettings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
@@ -146,6 +149,9 @@
     <ClCompile Include="Profiler.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LightSettings.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\VS_Skybox.hlsl">
@@ -185,9 +191,6 @@
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\RT_gBuffer.hlsl">
-      <Filter>Shaders\Raytracing</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\RT_Lambertian_Indirect.hlsl">
       <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
   </ItemGroup>

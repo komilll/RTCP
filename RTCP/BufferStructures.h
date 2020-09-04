@@ -19,12 +19,9 @@ typedef struct _sceneConstantBuffer
 {
 	XMMATRIX projectionToWorld;
 	XMFLOAT4 cameraPosition;
-	XMFLOAT4 lightPosition;
-	XMFLOAT4 lightAmbientColor;
-	XMFLOAT4 lightDiffuseColor;
 	int frameCount;
 
-	float padding[31] = {};
+	float padding[43] = {};
 } SceneConstantBuffer;
 static_assert((sizeof(SceneConstantBuffer) % 256) == 0, "Scene Constant Buffer size must be 256-byte aligned");
 
@@ -41,8 +38,8 @@ static_assert((sizeof(AoConstantBuffer) % 256) == 0, "Ao Constant Buffer size mu
 typedef struct _giConstantBuffer
 {
 	int useIndirect = 1;
-
-	float padding[63] = {};
+	int accFrames = 0;
+	float padding[62] = {};
 } GiConstantBuffer;
 static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
 
@@ -62,5 +59,12 @@ typedef struct _cameraConstantBuffer
 	float padding[47] = {};
 } CameraConstantBuffer;
 static_assert((sizeof(CameraConstantBuffer) % 256) == 0, "Camera Constant Buffer size must be 256-byte aligned");
+
+typedef struct _lightConstantBuffer
+{
+	XMFLOAT4 lightDiffuseColor[16];
+	XMFLOAT4 lightPositionAndType[16];
+} LightConstantBuffer;
+static_assert((sizeof(LightConstantBuffer) % 256) == 0, "Light Constant Buffer size must be 256-byte aligned");
 
 #endif // !_BUFFER_STRUCTURES_H_
