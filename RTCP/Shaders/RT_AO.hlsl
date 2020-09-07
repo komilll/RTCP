@@ -19,8 +19,10 @@ struct RaytracingAOBuffer
 	float aoRadius;
 	float minT;
 	int accFrames;
-
-	float padding[61];
+	int sampleCount;
+	int maxFrames;
+	
+	float padding[59];
 };
 
 // Resources
@@ -87,19 +89,24 @@ void RayGen()
 	// Calculate direction of raytracing for AO sample
 	float3 pixelWorldSpacePosition = primaryRayOrigin + (primaryRayDirection * normalAndDepth.w);
 	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount);
-	float3 worldDir = getCosHemisphereSample(seed.x, normalAndDepth.xyz);
 	
-	// Prepare ray description and payload
 	float ao = 0.0f;
-	RayDesc aoRay = { pixelWorldSpacePosition, g_aoCB.minT, worldDir, g_aoCB.aoRadius };
-	RayPayload payload;
-	// Set T to "maximum", no occlusion if ray doesn't hit anything 
-	payload.T = g_aoCB.aoRadius;
-
-	// Trace the ray
-	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, aoRay, payload);
-	ao = payload.T / g_aoCB.aoRadius;
+	for (int i = 0; i < g_aoCB.sampleCount; i++)
+	{
+		nextRand(seed);
+		float3 worldDir = getCosHemisphereSample(seed.x, normalAndDepth.xyz);
 	
+		// Prepare ray description and payload
+		RayDesc aoRay = { pixelWorldSpacePosition, g_aoCB.minT, worldDir, g_aoCB.aoRadius };
+		RayPayload payload;
+		// Set T to "maximum", no occlusion if ray doesn't hit anything 
+		payload.T = g_aoCB.aoRadius;
+
+		// Trace the ray
+		TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, aoRay, payload);
+		ao += payload.T / g_aoCB.aoRadius;
+	}
+	ao /= (float) g_aoCB.sampleCount;
 	// Accumulate AO with previous frames
 	float prevAO = RTOutput[LaunchIndex].x;
 	ao = ((float) g_aoCB.accFrames * prevAO + ao) / ((float) g_aoCB.accFrames + 1.0f);

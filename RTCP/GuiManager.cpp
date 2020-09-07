@@ -2,6 +2,10 @@
 
 void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
 {
+    if (!m_isActive)
+    {
+        return;
+    }
     ID3D12DescriptorHeap* ppHeaps[] = { m_imGuiHeap.Get() };
     commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
@@ -11,24 +15,40 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
 
     {
         ImGui::Begin("Raytracing settings");
-        if (ImGui::SliderFloat("AO Radius", &m_renderer->m_aoBuffer.value.aoRadius, 0.0f, 50.0f, "%.2f")) {
+        ImGui::Text(std::to_string(m_renderer->m_aoBuffer.value.accFrames).c_str());
+        if (ImGui::Checkbox("Render only AO", &m_renderer->RENDER_ONLY_RTAO))
+        {
             m_renderer->m_resetFrameAO = true;
+            m_renderer->m_resetFrameGI = true;
+            m_renderer->m_resetFrameProfiler = true;
         }
-        if (ImGui::SliderFloat("AO Min T", &m_renderer->m_aoBuffer.value.minT, 1e-10f, 1e-1f, "%.4f")) {
-            m_renderer->m_resetFrameAO = true;
-        }
-        if (ImGui::Checkbox("AO Frame jitter", &m_renderer->USE_AO_FRAME_JITTER)) {
-            m_renderer->m_resetFrameAO = true;
-        }
+        if (m_renderer->RENDER_ONLY_RTAO && ImGui::CollapsingHeader("AO options:"))
+        {
+            if (ImGui::SliderInt("AO Sample count", &m_renderer->m_aoBuffer.value.sampleCount, 1, 100)) {
+                m_renderer->m_resetFrameAO = true;
+            }
+            if (ImGui::SliderInt("AO Max frame count", &m_renderer->m_aoBuffer.value.maxFrames, 0, 1000)) {
+                m_renderer->m_resetFrameAO = true;
+            }
+            if (ImGui::SliderFloat("AO Radius", &m_renderer->m_aoBuffer.value.aoRadius, 0.0f, 50.0f, "%.2f")) {
+                m_renderer->m_resetFrameAO = true;
+            }
+            if (ImGui::SliderFloat("AO Min T", &m_renderer->m_aoBuffer.value.minT, 1e-10f, 1e-1f, "%.4f")) {
+                m_renderer->m_resetFrameAO = true;
+            }
+            if (ImGui::Checkbox("AO Frame jitter", &m_renderer->USE_AO_FRAME_JITTER)) {
+                m_renderer->m_resetFrameAO = true;
+            }
 
-        if (ImGui::Checkbox("AO Thin lens", &m_renderer->USE_AO_THIN_LENS)) {
-            m_renderer->m_resetFrameAO = true;
-        }
-        if (ImGui::SliderFloat("AO fNumber", &m_renderer->m_cameraBuffer.value.fNumber, 1e-4f, 64.0f, "%.2f")) {
-            m_renderer->m_resetFrameAO = true;
-        }
-        if (ImGui::SliderFloat("AO Focal length", &m_renderer->m_cameraBuffer.value.focalLength, 1e-4f, 10.0f, "%.2f")) {
-            m_renderer->m_resetFrameAO = true;
+            if (ImGui::Checkbox("AO Thin lens", &m_renderer->USE_AO_THIN_LENS)) {
+                m_renderer->m_resetFrameAO = true;
+            }
+            if (ImGui::SliderFloat("AO fNumber", &m_renderer->m_cameraBuffer.value.fNumber, 1e-4f, 64.0f, "%.2f")) {
+                m_renderer->m_resetFrameAO = true;
+            }
+            if (ImGui::SliderFloat("AO Focal length", &m_renderer->m_cameraBuffer.value.focalLength, 1e-4f, 10.0f, "%.2f")) {
+                m_renderer->m_resetFrameAO = true;
+            }
         }
 
         if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_DIFFUSE_GI_INDIRECT)) {
@@ -104,6 +124,11 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
 
     ImGui::Render();
     ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
+}
+
+void GuiManager::ToogleRendering()
+{
+    m_isActive = !m_isActive;
 }
 
 GuiManager::GuiManager(ID3D12Device* device, Renderer* renderer)

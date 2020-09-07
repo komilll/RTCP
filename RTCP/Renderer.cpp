@@ -109,7 +109,10 @@ void Renderer::OnUpdate()
 
         if (!m_resetFrameAO)
         {
-            m_aoBuffer.value.accFrames++;
+            if ((m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0))
+            {
+                m_aoBuffer.value.accFrames++;
+            }
         }
         else
         {
@@ -546,6 +549,7 @@ void Renderer::PopulateCommandList()
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
         /* RTAO ALGORITHM */
+        if (RENDER_ONLY_RTAO && (m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0))
         {
             ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingAO->GetDescriptorHeap().Get() };
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -561,6 +565,7 @@ void Renderer::PopulateCommandList()
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
         /* RT LAMBERT ALGORITHM */
+        if (!RENDER_ONLY_RTAO)
         {
             ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingLambert->GetDescriptorHeap().Get() };
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -572,7 +577,10 @@ void Renderer::PopulateCommandList()
         }
         // Transition DXR output to a copy source
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-        m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtLambertTexture.Get());
+        if (!RENDER_ONLY_RTAO)
+        {
+            m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtLambertTexture.Get());
+        }
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
@@ -1084,7 +1092,7 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
     skyboxDesc.TextureCube.MostDetailedMip = 0;
     textures.push_back({ TextureWithDesc{m_skyboxTexture, skyboxDesc } });
 
-    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(nullptr), GetVertexBufferSRVDesc(nullptr, sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer);
+    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)

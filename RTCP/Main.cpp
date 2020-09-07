@@ -83,6 +83,11 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
                     m_renderer->ToggleRaytracing();
                     m_inputManager->KeyUp(VK_R);
                 }
+                if (m_inputManager->IsKeyDown(VK_G))
+                {
+                    m_guiManager->ToogleRendering();
+                    m_inputManager->KeyUp(VK_G);
+                }
             }
         }
     }

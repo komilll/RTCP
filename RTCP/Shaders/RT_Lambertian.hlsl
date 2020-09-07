@@ -94,7 +94,7 @@ void RayGen()
 		return;
 	}
 	
-	float3 shadeColor = albedo.rgb;
+	float3 shadeColor = albedo.rgb / PI;
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
 	if (lightsCount > 0)
 	{
@@ -108,6 +108,7 @@ void RayGen()
 		float NoL = saturate(dot(normalAndDepth.xyz, toLight));
 			
 		float shadowMult = shadowRayVisibility(pixelWorldSpacePosition, toLight, 1e-4f, distToLight);
+		shadeColor += shadowMult * NoL * albedo.rgb / PI;
 		
 		if (g_giCB.useIndirect == 1)
 		{
@@ -117,12 +118,7 @@ void RayGen()
 			float sampleProb = NoDir / PI;
 			shadeColor += (NoDir * bounceColor * albedo.rgb / PI) / sampleProb;
 		}
-		else
-		{
-			shadeColor += shadowMult * NoL * lightColor / PI;
-		}
 	}
-	shadeColor *= albedo.rgb / PI;
 	
 	float4 prevScene = RTOutput[LaunchIndex];
 	float4 finalColor = float4(shadeColor, 1.0f);
@@ -139,37 +135,7 @@ void Miss(inout RayPayload payload : SV_RayPayload)
 [shader("closesthit")]
 void ClosestHit(inout PayloadIndirect payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-	float3 hitPos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-	
-	uint indexSizeInBytes = 4;
-	uint indicesPerTriangle = 3;
-	uint triangleIndexStride = indicesPerTriangle * indexSizeInBytes;
-	uint baseIndex = PrimitiveIndex() * triangleIndexStride;
-	
-	const uint3 indices_ = indices.Load3(baseIndex);
-	float3 vertexNormals[3] =
-	{
-		vertices[indices_[0]].normal,
-		vertices[indices_[1]].normal,
-		vertices[indices_[2]].normal
-	};
-	float3 triangleNormal = HitAttribute(vertexNormals, attribs);
-	
-	//
-	float lightsCount = g_lightCB.lightPositionAndType[15].w;
-	int lightToSample = min(int(nextRand(payload.rndSeed) * lightsCount), lightsCount - 1);
-	
-	float3 lightColor = g_lightCB.lightDiffuseColor[lightToSample].rgb;
-	float3 toLight = g_lightCB.lightPositionAndType[lightToSample].xyz - hitPos;
-	float distToLight = length(toLight);
-	toLight = normalize(toLight);
-	float NoL = saturate(dot(triangleNormal.xyz, toLight));
-	
-	float visibility = shadowRayVisibility(hitPos, toLight, 1e-4f, 1e+38f);
-	//float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
 
-	//payload.color = visibility * NoL * lightColor * albedo.xyz / PI;
-	payload.color = triangleNormal;
 }
 
 [shader("miss")]
@@ -178,7 +144,7 @@ void MissIndirect(inout PayloadIndirect payload : SV_RayPayload)
 	float3 rayDir = WorldRayDirection();
 	rayDir.z = -rayDir.z;
 	
-	//payload.color = skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+	payload.color = skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
 }
 
 [shader("closesthit")]
@@ -213,8 +179,7 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 	float visibility = shadowRayVisibility(hitPos, toLight, 1e-4f, 1e+38f);
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
 
-	//payload.color = visibility * NoL * lightColor * albedo.xyz / PI;
-	payload.color = visibility; // * lightColor * albedo.rgb / PI;;
+	payload.color = visibility * NoL * albedo.rgb / PI;
 }
 
 #endif //_RT_LAMBERTIAN_HLSL_

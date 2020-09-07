@@ -30,8 +30,10 @@ typedef struct _aoConstantBuffer
 	float aoRadius = 1.0f;
 	float minT = 1e-4f;
 	int accFrames;
+	int sampleCount = 1;
+	int maxFrames = 0;
 
-	float padding[61] = {};
+	float padding[59] = {};
 } AoConstantBuffer;
 static_assert((sizeof(AoConstantBuffer) % 256) == 0, "Ao Constant Buffer size must be 256-byte aligned");
 

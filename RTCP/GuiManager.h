@@ -19,10 +19,12 @@ public:
 	GuiManager(ID3D12Device* device, Renderer* renderer);
 
 	void Render(ID3D12GraphicsCommandList* commandList);
+	void ToogleRendering();
 
 private:
 	ComPtr<ID3D12DescriptorHeap> m_imGuiHeap;
 	Renderer* m_renderer;
+	bool m_isActive = true;
 };
 
 #endif // !_GUI_MANAGER_H_

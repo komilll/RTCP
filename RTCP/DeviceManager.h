@@ -54,8 +54,8 @@ private:
 	static constexpr int m_frameCount = 2;
 	static constexpr bool m_useWarp = false;
 
-	int m_windowWidth = 1280;
-	int m_windowHeight = 720;
+	int m_windowWidth = 1920;
+	int m_windowHeight = 1080;
 	bool m_vSync = true;
 	bool m_tearingSupported = true;
 

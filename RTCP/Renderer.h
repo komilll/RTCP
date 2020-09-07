@@ -118,8 +118,8 @@ private:
 	static constexpr float Z_NEAR = 0.01f;
 	static constexpr float Z_FAR = 200.0f;
 	static constexpr int m_frameCount = 2;
-	static constexpr int m_windowWidth = 1280;
-	static constexpr int m_windowHeight = 720;
+	static constexpr int m_windowWidth = 1920;
+	static constexpr int m_windowHeight = 1080;
 	static constexpr float m_aspectRatio = static_cast<float>(m_windowWidth) / static_cast<float>(m_windowHeight);
 
 	// DEBUG PROPERTIES
@@ -128,6 +128,7 @@ private:
 	bool USE_AO_FRAME_JITTER = false;
 	bool USE_AO_THIN_LENS = false;
 	bool USE_DIFFUSE_GI_INDIRECT = true;
+	bool RENDER_ONLY_RTAO = false;
 
 	// Frame data
 	UINT64 m_currentCPUFrame = 0;
