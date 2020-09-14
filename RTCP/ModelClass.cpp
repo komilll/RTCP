@@ -41,25 +41,36 @@ ModelClass::ModelClass(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID
 	// error
 #endif
 
-	D3D12_RESOURCE_DESC textureDesc = {};
-	textureDesc.MipLevels = 1;
-	textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	textureDesc.Width = 128;
-	textureDesc.Height = 128;
-	textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-	textureDesc.DepthOrArraySize = 36;
-	textureDesc.SampleDesc.Count = 1;
-	textureDesc.SampleDesc.Quality = 0;
-	textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	//D3D12_RESOURCE_DESC textureDesc = {};
+	//textureDesc.MipLevels = 1;
+	//textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	//textureDesc.Width = 128;
+	//textureDesc.Height = 128;
+	//textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	//textureDesc.DepthOrArraySize = 36;
+	//textureDesc.SampleDesc.Count = 1;
+	//textureDesc.SampleDesc.Quality = 0;
+	//textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 
-	ThrowIfFailed(device->CreateCommittedResource(
-		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-		D3D12_HEAP_FLAG_NONE,
-		&textureDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST,
-		nullptr,
-		IID_PPV_ARGS(&m_resource)
-	));
+	//ThrowIfFailed(device->CreateCommittedResource(
+	//	&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+	//	D3D12_HEAP_FLAG_NONE,
+	//	&textureDesc,
+	//	D3D12_RESOURCE_STATE_COPY_DEST,
+	//	nullptr,
+	//	IID_PPV_ARGS(&m_resourceAlbedo)
+	//));
+
+	//ThrowIfFailed(device->CreateCommittedResource(
+	//	&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+	//	D3D12_HEAP_FLAG_NONE,
+	//	&textureDesc,
+	//	D3D12_RESOURCE_STATE_COPY_DEST,
+	//	nullptr,
+	//	IID_PPV_ARGS(&m_resourceSpecRoughness)
+	//));
+
+	//m_diffuseTextures.resize(36);
 
 	LoadModel(path, device, commandList, uploadHeap);
 }
@@ -159,7 +170,7 @@ void ModelClass::ProcessScene(std::string path, ComPtr<ID3D12Device2> device, Co
 	const auto index = path.find_last_of('\\');
 	path = path.substr(0, index + 1) + filename;
 
-	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | /*aiProcess_ConvertToLeftHanded | */ aiProcess_OptimizeMeshes | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
+	const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_ConvertToLeftHanded |  aiProcess_OptimizeMeshes | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
 
 	assert(scene);
 #pragma warning(push)
@@ -186,25 +197,33 @@ void ModelClass::ProcessNode(std::vector<Mesh>& meshes, aiNode* node, const aiSc
 	}
 }
 
-std::string texType{};
 ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, unsigned int textureID, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList)
 {
-	std::vector<Texture> textures;
 	Mesh localMesh;
 	localMesh.vertices.resize(mesh->mNumVertices);
-	bool hasTex = false;
+	bool hasTexAlbedo = false;
+	bool hasTexSpecRoughness = false;
+	unsigned int albedoTexID = -1;
+	unsigned int specRoughnessTexID = -1;
 
 	if (mesh->mMaterialIndex >= 0)
 	{
 		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-		texType = DetermineTextureType(scene, material);
 
-		std::vector<Texture> diffuseMaps = LoadMaterialTextures(material, aiTextureType_DIFFUSE, "texture_diffuse", scene, device, commandList, textureID);
-		textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
+		m_diffuseTexturesResources.push_back({});
+		std::vector<Texture> diffuseMaps = LoadMaterialTextures(m_diffuseTexturesResources[textureID], m_diffuseTextures, material, DetermineTextureType(scene, material), aiTextureType_DIFFUSE, "texture_diffuse", scene, device, commandList, textureID);
 		if (diffuseMaps.size() > 0) 
 		{
-			hasTex = true;
-			textureID = diffuseMaps[0].textureID;
+			hasTexAlbedo = true;
+			albedoTexID = diffuseMaps[0].textureID;
+		}
+
+		m_specularTexturesResources.push_back({});
+		std::vector<Texture> specularMaps = LoadMaterialTextures(m_specularTexturesResources[textureID], m_specularTextures, material, DetermineTextureType(scene, material), aiTextureType_SPECULAR, "texture_specRoughness", scene, device, commandList, textureID);
+		if (specularMaps.size() > 0)
+		{
+			hasTexSpecRoughness = true;
+			specRoughnessTexID = specularMaps[0].textureID;
 		}
 	}
 
@@ -215,7 +234,8 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 		vertex.position = XMFLOAT3{ mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
 
 		// TEXTURE ID
-		vertex.textureID = hasTex ? textureID : -1;
+		vertex.textureAlbedoID = hasTexAlbedo ? albedoTexID : -1;
+		vertex.textureSpecRoughnessID = hasTexSpecRoughness ? specRoughnessTexID : -1;
 
 		//NORMAL
 		if (mesh->mNormals) {
@@ -328,7 +348,7 @@ std::string ModelClass::DetermineTextureType(const aiScene* scene, aiMaterial* m
 	return ".";
 }
 
-std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index)
+std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(ComPtr<ID3D12Resource>& resource, std::vector<Texture>& texturesRef, aiMaterial* mat, std::string texType, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index)
 {
 	std::vector<Texture> textures;
 
@@ -338,10 +358,10 @@ std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(aiMaterial* ma
 		mat->GetTexture(type, i, &str);
 		// Check if texture was loaded before and if so, continue to next iteration: skip loading a new texture
 		bool skip = false;
-		for (UINT j = 0; j < m_textures.size(); j++) {
-			if (std::strcmp(m_textures[j].path.c_str(), str.C_Str()) == 0) {
-				textures.push_back(m_textures[j]);
-				textures[textures.size() - 1].textureID = m_textures[j].textureID;
+		for (UINT j = 0; j < texturesRef.size(); j++) {
+			if (std::strcmp(texturesRef[j].path.c_str(), str.C_Str()) == 0) {
+				textures.push_back(texturesRef[j]);
+				textures[textures.size() - 1].textureID = texturesRef[j].textureID;
 				skip = true; // A texture with the same filepath has already been loaded, continue to next one. (optimization)
 				break;
 			}
@@ -357,7 +377,7 @@ std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(aiMaterial* ma
 			{
 				//int textureindex = GetTextureIndex(&str);
 				std::string filename = std::string(str.C_Str());
-				auto data = GetTextureFromModel(scene, filename, device, commandList, index);
+				auto data = GetTextureFromModel(resource, scene, filename, device, commandList, index);
 				texture.resource = data.first;
 				texture.subresourceData = data.second;
 			}
@@ -365,7 +385,7 @@ std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(aiMaterial* ma
 			texture.type = typeName;
 			texture.path = str.C_Str();
 			textures.push_back(texture);
-			this->m_textures.push_back(texture);  // Store it as texture loaded for entire model, to ensure we won't unnecesery load duplicate textures.
+			texturesRef.push_back(texture);  // Store it as texture loaded for entire model, to ensure we won't unnecesery load duplicate textures.
 		}
 	}
 
@@ -380,7 +400,7 @@ int ModelClass::GetTextureIndex(aiString* str)
 	return stoi(tistr);
 }
 
-std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTextureFromModel(const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index)
+std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTextureFromModel(ComPtr<ID3D12Resource>& resource, const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index)
 {
 	D3D12_SUBRESOURCE_DATA textureDataSingle;
 	std::unique_ptr<uint8_t[]> decodedData;
@@ -408,17 +428,33 @@ std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTexture
 	UpdateSubresources(commandList.Get(), texture.Get(), m_uploadHeaps[m_uploadHeaps.size() - 1].Get(), 0, 0, 1, &textureDataSingle);
 	//commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, InitialResourceState));
 
-	const UINT64 uploadBufferStep = GetRequiredIntermediateSize(m_resource.Get(), 0, 1); // All of our textures are the same size in this case.
-
 	//if (textureDataSingle.SlicePitch == 128 * 128 * 4)
-	if (texture->GetDesc().Width == 128 && texture->GetDesc().Height == 128)
+	//if (texture->GetDesc().Width == 128 && texture->GetDesc().Height == 128)
 	{
 		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(texture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
 
+		D3D12_RESOURCE_DESC textureDesc = {};
+		textureDesc.MipLevels = 1;
+		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		textureDesc.Width = texture->GetDesc().Width;
+		textureDesc.Height = texture->GetDesc().Height;
+		textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+		textureDesc.DepthOrArraySize = 1;
+		textureDesc.SampleDesc.Count = 1;
+		textureDesc.SampleDesc.Quality = 0;
+		textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+		ThrowIfFailed(device->CreateCommittedResource(
+			&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
+			D3D12_HEAP_FLAG_NONE,
+			&textureDesc,
+			D3D12_RESOURCE_STATE_COPY_DEST,
+			nullptr,
+			IID_PPV_ARGS(&resource)
+		));
+
 		D3D12_TEXTURE_COPY_LOCATION dst{};
-		dst.pResource = m_resource.Get();
-		dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-		dst.SubresourceIndex = index;
+		dst.pResource = resource.Get();
 
 		D3D12_TEXTURE_COPY_LOCATION src{};
 		src.pResource = texture.Get();
@@ -479,9 +515,6 @@ bool ModelClass::CreateRectangle(ComPtr<ID3D12Device2> device, float left, float
 
 bool ModelClass::PrepareBuffers(ComPtr<ID3D12Device2> device, DXGI_FORMAT indexFormat)
 {
-	//std::vector<ModelClass::VertexBufferStruct> vertices = GetMesh(10).vertices;
-	//std::vector<unsigned long> indices = GetMesh(10).indices;
-
 	std::vector<ModelClass::VertexBufferStruct> vertices{};
 	std::vector<unsigned long> indices{};
 

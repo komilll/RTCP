@@ -20,8 +20,9 @@ typedef struct _sceneConstantBuffer
 	XMMATRIX projectionToWorld;
 	XMFLOAT4 cameraPosition;
 	int frameCount;
+	int specularIndex;
 
-	float padding[43] = {};
+	float padding[42] = {};
 } SceneConstantBuffer;
 static_assert((sizeof(SceneConstantBuffer) % 256) == 0, "Scene Constant Buffer size must be 256-byte aligned");
 
@@ -41,7 +42,9 @@ typedef struct _giConstantBuffer
 {
 	int useIndirect = 1;
 	int accFrames = 0;
-	float padding[62] = {};
+	float roughness = 0.75f;
+	float metallic = 0.0f;
+	float padding[60] = {};
 } GiConstantBuffer;
 static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
 

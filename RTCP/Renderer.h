@@ -17,6 +17,9 @@
 
 using namespace DirectX;
 typedef std::array<D3D12_INPUT_ELEMENT_DESC, 6> BasicInputLayout;
+struct WindowSize {
+	int x, y;
+};
 
 // DEFINES
 #define ROOT_SIGNATURE_PIXEL D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;// | //D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
@@ -27,7 +30,7 @@ class Renderer
 	friend class Main;
 public:
 	// No default constructor
-	Renderer(std::shared_ptr<DeviceManager> deviceManager, HWND hwnd);
+	Renderer() = default;
 
 	// Main events occuring in renderer - init/loop/destroy
 	void OnInit(HWND hwnd);
@@ -44,6 +47,9 @@ public:
 	// Modifying rendering state - DEBUG
 	void ToggleRaytracing() { DO_RAYTRACING = !DO_RAYTRACING; };
 
+	// Get properties of renderer
+	WindowSize GetWindowSize() const { return { m_windowWidth, m_windowHeight }; };
+
 private:
 	// Prepare pipeline and load data to start rendering
 	void LoadPipeline(HWND hwnd);
@@ -58,7 +64,7 @@ private:
 	void CreateViewAndPerspective();
 
 	// Helper functions, creating structures
-	void CreateTexture2D(ComPtr<ID3D12Resource>& texture, UINT64 width, UINT height, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT layout = D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES InitialResourceState = D3D12_RESOURCE_STATE_COPY_SOURCE);
+	void CreateTexture2D(ComPtr<ID3D12Resource>& texture, UINT64 width, UINT height, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT layout = D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES InitialResourceState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	void CreateTextureFromFileRTCP(ComPtr<ID3D12Resource>& texture, ComPtr<ID3D12GraphicsCommandList4> commandList, const wchar_t* path, ComPtr<ID3D12Resource>& uploadHeap, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATES InitialResourceState = D3D12_RESOURCE_STATE_COPY_SOURCE);
 	
 	void CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ComPtr<ID3D12RootSignature>& rootSignature);
@@ -70,6 +76,8 @@ private:
 	static void CreateSRV_Texture3D(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels = 1, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE3D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING });
 	static void CreateSRV_TextureCube(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels = 1, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING });
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC GetDefaultSkyboxDesc(DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM) const;
+	D3D12_SHADER_RESOURCE_VIEW_DESC GetDefaultSRVTexture2DDesc(DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM) const;
 	D3D12_SHADER_RESOURCE_VIEW_DESC GetVertexBufferSRVDesc(ModelClass* model, UINT vertexStructSize);
 	D3D12_SHADER_RESOURCE_VIEW_DESC GetIndexBufferSRVDesc(ModelClass* model);
 	template <class T>
@@ -93,18 +101,10 @@ private:
 	void PrepareRaytracingResources(const std::shared_ptr<ModelClass> model);
 	void PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> model);
 	void PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClass> model);
-
-	//// Functions called by PrepareRaytracingResources()
-	//void CreateBLAS(std::shared_ptr<ModelClass> model, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& blasScratch, ComPtr<ID3D12Resource>& blasResult, D3D12_RAYTRACING_GEOMETRY_FLAGS rayTracingFlags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
-	//void CreateTLAS(ComPtr<ID3D12Resource> blasResult, ComPtr<ID3D12GraphicsCommandList4> commandList, ComPtr<ID3D12Resource>& tlasInstanceDesc, ComPtr<ID3D12Resource>& tlasScratch, ComPtr<ID3D12Resource>& tlasResult, UINT tlasFlags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_FRONT_COUNTERCLOCKWISE, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE);
-	//void CreateDxrPipelineAssets(ModelClass* model);
-	//void CreateShaderTable(ComPtr<ID3D12Resource>& shaderTable, ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName, uint32_t& shaderTableRecordSize);
-	//void CreateRTPSO(ComPtr<ID3D12StateObject>& rtpso, ComPtr<ID3D12StateObjectProperties>& rtpsoInfo, RtProgram rayGenShader, RtProgram missShader, HitProgram hitShader, LPCWSTR hitGroupName);
-
-	// Functions called by PrepareRaytracingResources() - prepare initial buffer values
-	void InitializeRaytracingBufferValues();
+	void PrepareRaytracingResourcesGGX(const std::shared_ptr<ModelClass> model);
 
 	// Functions called by PrepareRaytracingResources() - generating shaders
+	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, std::vector<TextureWithDesc> textures, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = nullptr);
 	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = nullptr);
 	void CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, std::vector<D3D12_DESCRIPTOR_RANGE> ranges, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport = nullptr);
 	void CreateMissShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, LPCWSTR name, LPCWSTR nameToExport = nullptr) const;
@@ -127,8 +127,10 @@ private:
 	bool DO_RAYTRACING = true;
 	bool USE_AO_FRAME_JITTER = false;
 	bool USE_AO_THIN_LENS = false;
-	bool USE_DIFFUSE_GI_INDIRECT = true;
+	bool USE_GI_INDIRECT = false;
 	bool RENDER_ONLY_RTAO = false;
+	bool RENDER_LAMBERT = false;
+	bool RENDER_GGX = true;
 
 	// Frame data
 	UINT64 m_currentCPUFrame = 0;
@@ -137,6 +139,7 @@ private:
 	std::shared_ptr<Profiler> m_profiler = nullptr;
 
 	// Camera settings
+	float m_cameraSpeed = 0.25f;
 	XMFLOAT3 m_cameraPosition{ 0,0,0 };
 	XMFLOAT3 m_cameraRotation{ 0,0,0 };
 	XMFLOAT3 m_cameraPositionStoredInFrame{ 0,0,0 };
@@ -158,7 +161,6 @@ private:
 	// Pipeline variables - device, commandQueue, swap chain
 	int m_frameIndex = 0;
 	ComPtr<ID3D12Device5> m_device					= NULL;
-	std::shared_ptr<DeviceManager> m_deviceManager	= NULL;
 	ComPtr<ID3D12CommandQueue> m_commandQueue		= NULL;
 	ComPtr<IDXGISwapChain3> m_swapChain				= NULL;
 
@@ -218,12 +220,15 @@ private:
 	std::shared_ptr<RaytracingResources> m_raytracingGBuffer = NULL;
 	std::shared_ptr<RaytracingResources> m_raytracingAO = NULL;
 	std::shared_ptr<RaytracingResources> m_raytracingLambert = NULL;
+	std::shared_ptr<RaytracingResources> m_raytracingGGX = NULL;
 
 	// DXR - output texture and descriptor heap of resources
 	ComPtr<ID3D12Resource> m_rtAlbedoTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtNormalTexture = NULL;
+	ComPtr<ID3D12Resource> m_rtSpecularTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtAoTexture = NULL;
 	ComPtr<ID3D12Resource> m_rtLambertTexture = NULL;
+	ComPtr<ID3D12Resource> m_rtGGXTexture = NULL;
 
 	// Shader compiler
 	D3D12ShaderCompilerInfo m_shaderCompiler{};

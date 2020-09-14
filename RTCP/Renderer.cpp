@@ -5,26 +5,6 @@
 #include <DirectXTex.h>
 #include <SimpleMath.h>
 
-Renderer::Renderer(std::shared_ptr<DeviceManager> deviceManager, HWND hwnd)
-{
-    m_deviceManager = deviceManager;
-    assert(m_deviceManager && "Device manager is null");
-
-    m_viewport.TopLeftY = 0.0f;
-    m_viewport.TopLeftX = 0.0f;
-    m_viewport.Width = static_cast<float>(m_windowWidth);
-    m_viewport.Height = static_cast<float>(m_windowHeight);
-
-    m_scissorRect.left = 0;
-    m_scissorRect.top = 0;
-    m_scissorRect.right = static_cast<LONG>(m_windowWidth);
-    m_scissorRect.bottom = static_cast<LONG>(m_windowHeight);
-
-    m_cameraPosition = XMFLOAT3{ 0.1f, 1.4f, -3.7f };
-    m_cameraRotation = XMFLOAT3{ 10.5f, -29.5f, 0.0f };
-    CreateViewAndPerspective();
-}
-
 void Renderer::OnRender()
 {
     // Prepare commands to execute
@@ -45,6 +25,25 @@ void Renderer::OnRender()
 
 void Renderer::OnInit(HWND hwnd)
 {
+    // Prepare viewport and camera data
+    m_viewport.TopLeftY = 0.0f;
+    m_viewport.TopLeftX = 0.0f;
+    m_viewport.Width = static_cast<float>(m_windowWidth);
+    m_viewport.Height = static_cast<float>(m_windowHeight);
+
+    m_scissorRect.left = 0;
+    m_scissorRect.top = 0;
+    m_scissorRect.right = static_cast<LONG>(m_windowWidth);
+    m_scissorRect.bottom = static_cast<LONG>(m_windowHeight);
+
+    // Buddha
+    m_cameraPosition = XMFLOAT3{ 26.0f, 6.8f, 10.0f };
+    m_cameraRotation = XMFLOAT3{ 14.5f, -89.5f, 0.0f };
+
+    //m_cameraPosition = XMFLOAT3{ 0.1f, 1.4f, -3.7f };
+    //m_cameraRotation = XMFLOAT3{ 10.5f, -29.5f, 0.0f };
+    CreateViewAndPerspective();
+
     // Preparing devices, resources, views to enable rendering
     LoadPipeline(hwnd);
     LoadAssets();
@@ -64,6 +63,8 @@ void Renderer::OnInit(HWND hwnd)
 void Renderer::OnUpdate()
 {
     XMMATRIX lastFrameView = m_constantBuffer.value.view;
+
+    m_resetFrameProfiler = m_resetFrameAO || m_resetFrameGI;
 
     CreateViewAndPerspective();
     // Update vertexShader.hlsl
@@ -151,7 +152,7 @@ void Renderer::OnUpdate()
 
     // Update gi buffer
     {
-        m_giBuffer.value.useIndirect = USE_DIFFUSE_GI_INDIRECT ? 1 : 0;
+        m_giBuffer.value.useIndirect = USE_GI_INDIRECT ? 1 : 0;
         if (m_resetFrameGI) {
             m_resetFrameGI = false;
             m_giBuffer.value.accFrames = 0;
@@ -169,8 +170,6 @@ void Renderer::OnUpdate()
             m_updateLightCount = false;
 
             auto lightsInfo = m_lightSettings->GetLightsInfo();
-            // Use first element as array size indicator
-            //m_lightBuffer.values[0].type = static_cast<int>(lightsInfo.size());
 
             for (int i = 0; i < std::min(static_cast<int>(lightsInfo.size()), 15); ++i)
             {
@@ -182,6 +181,7 @@ void Renderer::OnUpdate()
                 m_lightBuffer.value.lightDiffuseColor[i] = XMFLOAT4{ 0,0,0,0 };
                 m_lightBuffer.value.lightPositionAndType[i] = XMFLOAT4{ 0,0,0,0 };
             }
+            // Use last element as array size indicator
             m_lightBuffer.value.lightPositionAndType[15].w = static_cast<float>(std::min(static_cast<int>(lightsInfo.size()), 15));
             m_lightBuffer.Update();
 
@@ -263,9 +263,9 @@ void Renderer::LoadPipeline(HWND hwnd)
     ThrowIfFailed(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&dxgiFactory)));
 
     // Create device, command queue and swap chain
-    m_device = m_deviceManager->CreateDevice(dxgiFactory);
-    m_commandQueue = m_deviceManager->CreateCommandQueue(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-    m_swapChain = m_deviceManager->CreateSwapChain(hwnd, m_commandQueue, dxgiFactory, m_windowWidth, m_windowHeight, m_frameCount);
+    m_device = DeviceManager::CreateDevice(dxgiFactory);
+    m_commandQueue = DeviceManager::CreateCommandQueue(m_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+    m_swapChain = DeviceManager::CreateSwapChain(hwnd, m_commandQueue, dxgiFactory, m_windowWidth, m_windowHeight, m_frameCount);
 
     // This sample does not support fullscreen transitions.
     ThrowIfFailed(dxgiFactory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER));
@@ -429,12 +429,9 @@ void Renderer::LoadAssets()
     {
         m_modelCube = std::shared_ptr<ModelClass>(new ModelClass("cube.obj", m_device, m_commandList));
         m_modelSphere = std::shared_ptr<ModelClass>(new ModelClass("sphere.obj", m_device, m_commandList));
-        //m_modelBuddha = std::shared_ptr<ModelClass>(new ModelClass("happy-buddha.fbx", m_device, m_commandList));
-        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("pink_room.fbx", m_device, m_commandList, modelHeap));
+        m_modelBuddha = std::shared_ptr<ModelClass>(new ModelClass("happy-buddha.fbx", m_device, m_commandList));
+        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("SunTemple.fbx", m_device, m_commandList, modelHeap));
     }
-
-    // Fill structure data
-    InitializeRaytracingBufferValues();
 
     // Prepare shader compilator
     InitShaderCompiler(m_shaderCompiler);
@@ -481,8 +478,8 @@ void Renderer::LoadAssets()
     ComPtr<ID3D12Resource> uploadHeap;
     // Create texture for rasterized object
     {
-        CreateTextureFromFileRTCP(m_pebblesTexture, m_commandList, L"Pebles.png", uploadHeap, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-        CreateSRV_Texture2DArray(m_modelPinkRoom->GetTextureResources(), m_srvHeap.Get(), 0, m_device.Get());
+        //CreateTextureFromFileRTCP(m_pebblesTexture, m_commandList, L"Pebles.png", uploadHeap, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        //CreateSRV_Texture2DArray(m_modelPinkRoom->GetTextureResourcesAlbedo(), m_srvHeap.Get(), 0, m_device.Get());
     }
 
     ComPtr<ID3D12Resource> skyboxUploadHeap;
@@ -492,11 +489,20 @@ void Renderer::LoadAssets()
         CreateSRV_TextureCube(m_skyboxTexture, m_srvHeap.Get(), 1, m_device.Get());
     }
 
-    // Preparation of raytracing
-    const std::shared_ptr<ModelClass> model = m_modelPinkRoom;
+    // Preparation of raytracing - create textures that will be used in RT
+    CreateTexture2D(m_rtAoTexture, m_windowWidth, m_windowHeight);
+    CreateTexture2D(m_rtGGXTexture, m_windowWidth, m_windowHeight);
+    CreateTexture2D(m_rtLambertTexture, m_windowWidth, m_windowHeight);
+    CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    CreateTexture2D(m_rtAlbedoTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    CreateTexture2D(m_rtSpecularTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    // Preparation of raytracing - create resources objects with RTPSO
+    const std::shared_ptr<ModelClass> model = m_modelBuddha;
     PrepareRaytracingResources(model);
     PrepareRaytracingResourcesAO(model);
     PrepareRaytracingResourcesLambert(model);
+    PrepareRaytracingResourcesGGX(model);
 
     // Close the command list and execute it to begin the initial GPU setup.
     ThrowIfFailed(m_commandList->Close());
@@ -533,8 +539,6 @@ void Renderer::PopulateCommandList()
 
         // Wait for the transitions to complete
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
         /* RT G-BUFFER ALGORITHM */
         {
@@ -549,23 +553,27 @@ void Renderer::PopulateCommandList()
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
         /* RTAO ALGORITHM */
-        if (RENDER_ONLY_RTAO && (m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0))
+        if (RENDER_ONLY_RTAO)
         {
-            ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingAO->GetDescriptorHeap().Get() };
-            m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+            if (m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0)
+            {
+                ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingAO->GetDescriptorHeap().Get() };
+                m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-            ComPtr<ID3D12StateObject> rtpso = m_raytracingAO->GetRTPSO();
-            D3D12_DISPATCH_RAYS_DESC desc = m_raytracingAO->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
-            m_commandList->SetPipelineState1(rtpso.Get());
-            m_commandList->DispatchRays(&desc);
+                ComPtr<ID3D12StateObject> rtpso = m_raytracingAO->GetRTPSO();
+                D3D12_DISPATCH_RAYS_DESC desc = m_raytracingAO->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
+                m_commandList->SetPipelineState1(rtpso.Get());
+                m_commandList->DispatchRays(&desc);
+            }
+            // Transition DXR output to a copy source
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+            m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtAoTexture.Get());
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
         }
-        //// Transition DXR output to a copy source
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-        m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtAoTexture.Get());
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
         /* RT LAMBERT ALGORITHM */
-        if (!RENDER_ONLY_RTAO)
+        if (!RENDER_ONLY_RTAO && RENDER_LAMBERT)
         {
             ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingLambert->GetDescriptorHeap().Get() };
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -574,17 +582,34 @@ void Renderer::PopulateCommandList()
             D3D12_DISPATCH_RAYS_DESC desc = m_raytracingLambert->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
             m_commandList->SetPipelineState1(rtpso.Get());
             m_commandList->DispatchRays(&desc);
-        }
-        // Transition DXR output to a copy source
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-        if (!RENDER_ONLY_RTAO)
-        {
+
+            // Transition DXR output to a copy source
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
             m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtLambertTexture.Get());
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
         }
-        m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
 
+        /* RT GGX ALGORITHM */
+        if (!RENDER_ONLY_RTAO && RENDER_GGX)
+        {
+            ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingGGX->GetDescriptorHeap().Get() };
+            m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+            ComPtr<ID3D12StateObject> rtpso = m_raytracingGGX->GetRTPSO();
+            D3D12_DISPATCH_RAYS_DESC desc = m_raytracingGGX->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
+            m_commandList->SetPipelineState1(rtpso.Get());
+            m_commandList->DispatchRays(&desc);
+
+            // Transition DXR output to a copy source
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+            m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtGGXTexture.Get());
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+        }
+
+        // Unrelated to any algortihms
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-
         m_profiler->EndProfile(m_commandList.Get(), fullFrameIdx, m_currentFrameIdx);
     }
     else
@@ -847,6 +872,21 @@ D3D12_GRAPHICS_PIPELINE_STATE_DESC Renderer::CreateDefaultPSO(BasicInputLayout i
     return psoDesc;
 }
 
+D3D12_SHADER_RESOURCE_VIEW_DESC Renderer::GetDefaultSkyboxDesc(DXGI_FORMAT format) const
+{
+    D3D12_SHADER_RESOURCE_VIEW_DESC skyboxDesc = { format, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+    skyboxDesc.TextureCube.MipLevels = 1;
+    skyboxDesc.TextureCube.MostDetailedMip = 0;
+    return skyboxDesc;
+}
+
+D3D12_SHADER_RESOURCE_VIEW_DESC Renderer::GetDefaultSRVTexture2DDesc(DXGI_FORMAT format) const
+{
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { format, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
+    srvDesc.Texture2D.MipLevels = 1;
+    return srvDesc;
+}
+
 D3D12_SHADER_RESOURCE_VIEW_DESC Renderer::GetVertexBufferSRVDesc(ModelClass* model, UINT vertexStructSize)
 {
     D3D12_SHADER_RESOURCE_VIEW_DESC vertexSRVDesc;
@@ -999,28 +1039,26 @@ void Renderer::PrepareRaytracingResources(const std::shared_ptr<ModelClass> mode
     std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
     samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", 2, 2, 5, samplers, L"RayGen");
+    // UAV
+    std::vector<TextureWithDesc> textures{};
+    textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
+    textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
+    textures.push_back({ TextureWithDesc{m_rtSpecularTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
+    // SRV
+    textures.push_back({ TextureWithDesc{m_skyboxTexture, GetDefaultSkyboxDesc() } });
+    textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesAlbedo(), GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesSpecular(), GetDefaultSRVTexture2DDesc() } });
+
+    // Craete specular texture ID offset
+    m_sceneBuffer.value.specularIndex = static_cast<int>(m_modelPinkRoom->GetTextureResourcesAlbedo().size());
+    m_sceneBuffer.Update();
+
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", 2, textures, samplers, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"Miss");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", L"ClosestHit");
     m_raytracingGBuffer = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"Group_gBuffer"));
 
-    std::vector<TextureWithDesc> textures{};
-    CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    CreateTexture2D(m_rtAlbedoTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-    textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
-    textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
-    // SRV
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2DARRAY, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    srvDesc.Texture2DArray.MipLevels = 1;
-    srvDesc.Texture2DArray.ArraySize = 36;
-    textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResources(), srvDesc } });
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC skyboxDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    skyboxDesc.TextureCube.MipLevels = 1;
-    skyboxDesc.TextureCube.MostDetailedMip = 0;
-    textures.push_back({ TextureWithDesc{m_skyboxTexture, skyboxDesc } });
-
-    CreateRaytracingPipeline(m_raytracingGBuffer.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, { }, sizeof(XMFLOAT4) * 2);
+    CreateRaytracingPipeline(m_raytracingGBuffer.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, { }, sizeof(int));
 }
 
 void Renderer::PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> model)
@@ -1028,27 +1066,18 @@ void Renderer::PrepareRaytracingResourcesAO(const std::shared_ptr<ModelClass> mo
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", 3, 1, 5, {}, L"RayGen");
+    std::vector<TextureWithDesc> textures{};
+    // UAV
+    textures.push_back({ TextureWithDesc{m_rtAoTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
+    // SRV
+    textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT) } });
+    textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_skyboxTexture, GetDefaultSkyboxDesc() } });
+
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", 3, textures, {}, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"Miss");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"ClosestHit");
-    //CreateAnyHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_AO.hlsl", L"AnyHit_AO");
     m_raytracingAO = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, rayGenShader, missShader, hitShader, L"GroupAO"));
-
-    std::vector<TextureWithDesc> textures{};
-    CreateTexture2D(m_rtAoTexture, m_windowWidth, m_windowHeight);
-    textures.push_back({ TextureWithDesc{m_rtAoTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    D3D12_SHADER_RESOURCE_VIEW_DESC normalDesc = { DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    srvDesc.Texture2D.MipLevels = 1;
-    normalDesc.Texture2D.MipLevels = 1;
-    textures.push_back({ TextureWithDesc{m_rtNormalTexture, normalDesc } });
-    textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, srvDesc } });
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC skyboxDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    skyboxDesc.TextureCube.MipLevels = 1;
-    skyboxDesc.TextureCube.MostDetailedMip = 0;
-    textures.push_back({ TextureWithDesc{m_skyboxTexture, skyboxDesc } });
 
     CreateRaytracingPipeline(m_raytracingAO.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_aoBuffer, {}, sizeof(XMFLOAT4) * 2);
 }
@@ -1058,41 +1087,81 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
     RtProgram rayGenShader, missShader;
     HitProgram hitShader;
 
-    RtProgram missShader_new;
-    HitProgram hitShader_new;
+    RtProgram missShaderIndirect;
+    HitProgram hitShaderIndirect;
     
     std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
     samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
 
-    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 4, 1, 6, samplers, L"RayGen");
+    std::vector<TextureWithDesc> textures{};
+    // UAV
+    textures.push_back({ TextureWithDesc{m_rtLambertTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
+    // SRV
+    textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT) } });
+    textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_rtSpecularTexture, GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_skyboxTexture, GetDefaultSkyboxDesc() } });
+
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", 4, textures, samplers, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"Miss");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHit");
 
-    CreateMissShader(missShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"MissIndirect");
-    CreateClosestHitShader(hitShader_new, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHitIndirect");
+    CreateMissShader(missShaderIndirect, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"MissIndirect");
+    CreateClosestHitShader(hitShaderIndirect, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHitIndirect");
 
     HitGroup group = { rayGenShader, missShader, hitShader, L"GroupLambert" };
-    HitGroup group_new = { rayGenShader, missShader_new, hitShader_new, L"GroupLambert_new" };
+    HitGroup groupIndirect = { rayGenShader, missShaderIndirect, hitShaderIndirect, L"GroupLambert_new" };
 
-    m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, group_new}));
-
-    std::vector<TextureWithDesc> textures{};
-    CreateTexture2D(m_rtLambertTexture, m_windowWidth, m_windowHeight);
-    textures.push_back({ TextureWithDesc{m_rtLambertTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    D3D12_SHADER_RESOURCE_VIEW_DESC normalDesc = { DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    srvDesc.Texture2D.MipLevels = 1;
-    normalDesc.Texture2D.MipLevels = 1;
-    textures.push_back({ TextureWithDesc{m_rtNormalTexture, normalDesc } });
-    textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, srvDesc } });
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC skyboxDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURECUBE, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING };
-    skyboxDesc.TextureCube.MipLevels = 1;
-    skyboxDesc.TextureCube.MostDetailedMip = 0;
-    textures.push_back({ TextureWithDesc{m_skyboxTexture, skyboxDesc } });
+    m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, groupIndirect}));
 
     CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer);
+}
+
+void Renderer::PrepareRaytracingResourcesGGX(const std::shared_ptr<ModelClass> model)
+{
+    RtProgram rayGenShader, missShader;
+    HitProgram hitShader;
+
+    RtProgram missShaderIndirect;
+    HitProgram hitShaderIndirect;
+
+    std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers(1);
+    samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
+
+    std::vector<TextureWithDesc> textures{};
+    // UAV
+    textures.push_back({ TextureWithDesc{m_rtGGXTexture, GetAccessViewDesc(DXGI_FORMAT_UNKNOWN, D3D12_UAV_DIMENSION_TEXTURE2D)} });
+    // SRV
+    textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT) } });
+    textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_rtSpecularTexture, GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_skyboxTexture, GetDefaultSkyboxDesc() } });
+
+    CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", 4, textures, samplers, L"RayGen");
+    CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", L"Miss");
+    CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", L"ClosestHit");
+
+    //CreateMissShader(missShaderIndirect, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"MissIndirect");
+    //CreateClosestHitShader(hitShaderIndirect, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHitIndirect");
+
+    HitGroup group = { rayGenShader, missShader, hitShader, L"GroupGGX" };
+    //HitGroup groupIndirect = { rayGenShader, missShaderIndirect, hitShaderIndirect, L"GroupLambert_new" };
+
+    m_raytracingGGX = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group/*, groupIndirect*/ }));
+
+    CreateRaytracingPipeline(m_raytracingGGX.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer);
+}
+
+void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, std::vector<TextureWithDesc> textures, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
+{
+    int uav = 0;
+    int srv = 3; // AS + Vertex + Index
+    for (const auto& tex : textures)
+    {
+        srv += tex.isSRV ? 1 : 0;
+        uav += !tex.isSRV ? 1 : 0;
+    }
+    CreateRayGenShader(shader, shaderCompiler, path, cbvDescriptors, uav, srv, samplers, name, nameToExport);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, int uavDescriptors, int srvDescriptors, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
@@ -1244,9 +1313,4 @@ void Renderer::Compile_Shader(LPCWSTR pFileName, const D3D_SHADER_MACRO* pDefine
         }
         ThrowIfFailed(result);
     }
-}
-
-void Renderer::InitializeRaytracingBufferValues()
-{
-
 }

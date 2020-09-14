@@ -15,7 +15,7 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
 
     {
         ImGui::Begin("Raytracing settings");
-        ImGui::Text(std::to_string(m_renderer->m_aoBuffer.value.accFrames).c_str());
+        ImGui::Text(std::to_string(m_renderer->RENDER_ONLY_RTAO ? m_renderer->m_aoBuffer.value.accFrames : m_renderer->m_giBuffer.value.accFrames).c_str());
         if (ImGui::Checkbox("Render only AO", &m_renderer->RENDER_ONLY_RTAO))
         {
             m_renderer->m_resetFrameAO = true;
@@ -51,7 +51,34 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
             }
         }
 
-        if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_DIFFUSE_GI_INDIRECT)) {
+        if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_GI_INDIRECT)) {
+            m_renderer->m_resetFrameGI = true;
+        }
+
+        if (ImGui::CollapsingHeader("Raytracing shading model", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Selectable("Lambertian", &m_renderer->RENDER_LAMBERT))
+            {
+                m_renderer->m_resetFrameAO = true;
+                m_renderer->m_resetFrameGI = true;
+                m_renderer->m_resetFrameProfiler = true;
+                m_renderer->RENDER_GGX = false;
+                m_renderer->RENDER_LAMBERT = true;
+            }
+            if (ImGui::Selectable("GGX", &m_renderer->RENDER_GGX))
+            {
+                m_renderer->m_resetFrameAO = true;
+                m_renderer->m_resetFrameGI = true;
+                m_renderer->m_resetFrameProfiler = true;
+                m_renderer->RENDER_GGX = true;
+                m_renderer->RENDER_LAMBERT = false;
+            }
+        }
+        ImGui::Separator();
+        if (ImGui::SliderFloat("Material roughness", &m_renderer->m_giBuffer.value.roughness, 0.0f, 1.0f, "%.2f")) {
+            m_renderer->m_resetFrameGI = true;
+        }
+        if (ImGui::SliderFloat("Material metallic", &m_renderer->m_giBuffer.value.metallic, 0.0f, 1.0f, "%.2f")) {
             m_renderer->m_resetFrameGI = true;
         }
 
@@ -119,6 +146,9 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
         sprintf_s(camRotText, "Current cam rot: (%.1f, %.1f, %.1f)", m_renderer->m_cameraRotation.x, m_renderer->m_cameraRotation.y, m_renderer->m_cameraRotation.z);
         ImGui::Text(camPosText);
         ImGui::Text(camRotText);
+
+        ImGui::SliderFloat("Camera speed", &m_renderer->m_cameraSpeed, 0.01f, 25.0f, "%.2f");
+
         ImGui::End();
     }
 

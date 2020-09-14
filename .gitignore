@@ -24,5 +24,6 @@ ipch
 
 .vs/
 #x64/Debug
+x64/Debug/SunTemple.fbx
 x64/Release
 RTCP/x64/

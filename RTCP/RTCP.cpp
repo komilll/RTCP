@@ -7,24 +7,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR pScmdline,
 {
     HRESULT result = S_OK;
 
-    // Create device manager (needed to initialzie Main)
-    std::shared_ptr<DeviceManager> deviceManager = std::shared_ptr<DeviceManager>(new DeviceManager());
-
     // Initialize window
+    std::shared_ptr<Renderer> renderer = std::shared_ptr<Renderer>(new Renderer());
     std::shared_ptr<Main> main = std::shared_ptr<Main>(new Main());
-    result = main->InitializeWindow(hInstance, deviceManager);
+    result = main->InitializeWindow(hInstance, renderer);
 
     if (SUCCEEDED(result))
     {
-        // Prepare device manager resources
-        deviceManager->InitializeDeviceResponsibilities(main->GetWindowHandle());
-
         // Prepare renderer resources
-        std::shared_ptr<Renderer> renderer = std::shared_ptr<Renderer>(new Renderer(deviceManager, main->GetWindowHandle()));
         renderer->OnInit(main->GetWindowHandle());
 
         // Run main loop
-        main->Run(deviceManager, renderer);
+        main->Run(renderer);
     }
 
     return 0;

@@ -45,7 +45,8 @@ ByteAddressBuffer indices : register(t1);
 StructuredBuffer<Vertex> vertices : register(t2);
 Texture2D<float4> NormalTextureInput : register(t3);
 Texture2D<float4> albedoTexture : register(t4);
-TextureCube<float4> skyboxTexture : register(t5);
+Texture2D<float4> specularTexture : register(t5);
+TextureCube<float4> skyboxTexture : register(t6);
 
 SamplerState g_sampler : register(s0);
 ////

@@ -19,7 +19,8 @@ struct Vertex
 	float3 tangent;
 	float3 binormal;
 	float2 uv;
-	uint textureID;
+	uint textureAlbedoID;
+	uint textureSpecRoughnessID;
 };
 
 // Constant Buffers
@@ -29,7 +30,8 @@ struct SceneConstantBuffer
 	float4 cameraPosition;
 
 	int frameCount;
-	float padding[43];
+	int specularIndex;
+	float padding[42];
 };
 ////
 

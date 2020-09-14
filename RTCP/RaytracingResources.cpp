@@ -228,7 +228,11 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
         // Vertex + index + TLAS = 3
         // Buffer count = y // buffersWithSize
         // Number of textures = x // texturesWithDesc
-        desc.NumDescriptors = 3 + static_cast<UINT>(buffersWithSize.size()) + static_cast<UINT>(texturesWithDesc.size());
+        UINT textureCount = 0;
+        for (const auto& tex : texturesWithDesc) {
+            textureCount += static_cast<UINT>(tex.resources.size());
+        }
+        desc.NumDescriptors = 3 + static_cast<UINT>(buffersWithSize.size()) + static_cast<UINT>(textureCount);
         desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
         desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
@@ -267,8 +271,11 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
         {
             if (!tex.isSRV)
             {
-                handle.ptr += handleIncrement;
-                device->CreateUnorderedAccessView(tex.resource.Get(), nullptr, &tex.uavDesc, handle);
+                for (auto& singleTextureResource : tex.resources)
+                {
+                    handle.ptr += handleIncrement;
+                    device->CreateUnorderedAccessView(singleTextureResource.Get(), nullptr, &tex.uavDesc, handle);
+                }
             }
         }
         // Create buffer UAVs from CBuffers
@@ -327,10 +334,13 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
         // Create texture buffer SRV
         for (auto& tex : texturesWithDesc)
         {
-            if (tex.isSRV)
+            for (auto& singleTextureResource : tex.resources)
             {
-                handle.ptr += handleIncrement;
-                device->CreateShaderResourceView(tex.resource.Get(), &tex.srvDesc, handle);
+                if (tex.isSRV)
+                {
+                    handle.ptr += handleIncrement;
+                    device->CreateShaderResourceView(singleTextureResource.Get(), &tex.srvDesc, handle);
+                }
             }
         }
     }
@@ -436,7 +446,7 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
 
     ID3D12RootSignature* dummyLocalRootSignature;
     ID3D12RootSignature* dummyGlobalRootSignature;
-    // Create dummy local root signature
+    // Create dummy global and local root signature
     {
         HRESULT hr = 0;
         D3D12_ROOT_SIGNATURE_DESC rootDesc = {};

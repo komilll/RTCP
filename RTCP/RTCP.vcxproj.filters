@@ -193,6 +193,12 @@
     <FxCompile Include="Shaders\RT_gBuffer.hlsl">
       <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\RT_GGX.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\PS_BRDF_Helper.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

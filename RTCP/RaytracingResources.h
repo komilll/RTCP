@@ -13,19 +13,34 @@ struct TextureWithDesc
 public:
 	TextureWithDesc(ComPtr<ID3D12Resource>& resource_, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc_)
 	{
-		resource = resource_;
+		resources.push_back(resource_);
 		isSRV = true;
 		srvDesc = srvDesc_;
 	};
 
 	TextureWithDesc(ComPtr<ID3D12Resource>& resource_, D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc_)
 	{
-		resource = resource_;
+		resources.push_back(resource_);
 		isSRV = false;
 		uavDesc = uavDesc_;
 	};
 
-	ComPtr<ID3D12Resource> resource;
+	TextureWithDesc(std::vector<ComPtr<ID3D12Resource>>& resources_, D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc_)
+	{
+		resources = resources_;
+		isSRV = false;
+		uavDesc = uavDesc_;
+	};
+
+
+	TextureWithDesc(std::vector<ComPtr<ID3D12Resource>>& resources_, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc_)
+	{
+		resources = resources_;
+		isSRV = true;
+		srvDesc = srvDesc_;
+	};
+
+	std::vector<ComPtr<ID3D12Resource>> resources;
 	bool isSRV;
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;

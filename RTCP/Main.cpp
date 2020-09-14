@@ -1,11 +1,11 @@
 #include "Main.h"
 
-HRESULT Main::InitializeWindow(HINSTANCE hInstance, std::shared_ptr<DeviceManager> deviceManager)
+HRESULT Main::InitializeWindow(HINSTANCE hInstance, std::shared_ptr<Renderer> renderer)
 {
     m_isInitialized = false;
 
-    m_deviceManager = deviceManager;
-    assert(m_deviceManager && "Device manager is null");
+    m_renderer = renderer;
+    assert(m_renderer && "Renderer is null");
 
     m_hInstance = hInstance;
     assert(m_hInstance && "hInstance is null");
@@ -15,7 +15,7 @@ HRESULT Main::InitializeWindow(HINSTANCE hInstance, std::shared_ptr<DeviceManage
 
     RegisterWindowClass(hInstance, m_windowClassName.c_str());
 
-    m_hwnd = CreateWindow(m_windowClassName.c_str(), hInstance, L"RTCP", m_deviceManager->GetWindowSize().first, m_deviceManager->GetWindowSize().second);
+    m_hwnd = CreateWindow(m_windowClassName.c_str(), hInstance, L"RTCP", m_renderer->GetWindowSize().x, m_renderer->GetWindowSize().y);
     ::GetWindowRect(m_hwnd, &m_windowRect);
 
     self = this;
@@ -23,13 +23,11 @@ HRESULT Main::InitializeWindow(HINSTANCE hInstance, std::shared_ptr<DeviceManage
     return 0;
 }
 
-HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<Renderer> renderer)
+HRESULT Main::Run(std::shared_ptr<Renderer> renderer)
 {
     HRESULT result = S_OK;
 
     m_inputManager = std::shared_ptr<InputManager>(new InputManager());
-    m_deviceManager = deviceManager;
-    m_renderer = renderer;
     m_guiManager = std::shared_ptr<GuiManager>(new GuiManager(m_renderer->m_device.Get(), renderer.get()));
 
     m_isInitialized = true;
@@ -63,7 +61,7 @@ HRESULT Main::Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<
         {
             //Change camera position
             {
-                constexpr float xStrengthPosition = 0.25f, yStrengthPosition = xStrengthPosition, zStrengthPosition = xStrengthPosition;
+                const float xStrengthPosition = m_renderer->m_cameraSpeed, yStrengthPosition = xStrengthPosition, zStrengthPosition = xStrengthPosition;
                 const float x = xStrengthPosition * (m_inputManager->IsKeyDown(VK_A) ? -1.0f : (m_inputManager->IsKeyDown(VK_D) ? 1.0f : 0.0f));
                 const float y = yStrengthPosition * (m_inputManager->IsKeyDown(VK_E) ? 1.0f : (m_inputManager->IsKeyDown(VK_Q) ? -1.0f : 0.0f));
                 const float z = zStrengthPosition * (m_inputManager->IsKeyDown(VK_W) ? 1.0f : (m_inputManager->IsKeyDown(VK_S) ? -1.0f : 0.0f));

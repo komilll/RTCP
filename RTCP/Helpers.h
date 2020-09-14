@@ -56,3 +56,33 @@ inline void CreateUploadHeapRTCP(ID3D12Device5* device, CBuffer<T>& cbuffer)
         cbuffer.resource->Unmap(0, &readRange);
     }
 }
+
+//struct Bounds {
+//    float minX, minY, minZ;
+//    float maxX, maxY, maxZ;
+//
+//    Bounds() = default;
+//    Bounds(XMFLOAT3 min_, XMFLOAT3 max_) {
+//        minX = min_.x; minY = min_.y; minZ = min_.z;
+//        maxX = max_.x; maxY = max_.y; maxZ = max_.z;
+//    }
+//    Bounds(float minX_, float minY_, float minZ_, float maxX_, float maxY_, float maxZ_)
+//    {
+//        minX = minX_; minY = minY_; minZ = minZ_;
+//        maxX = maxX_; maxY = maxY_; maxZ = maxZ_;
+//    }
+//
+//    XMFLOAT3 GetCenter() const {
+//        return XMFLOAT3{ minX + (maxX - minX) * 0.5f, minY + (maxY - minY) * 0.5f, minZ + (maxZ - minZ) * 0.5f };
+//    }
+//    XMFLOAT3 GetSize() const {
+//        return XMFLOAT3{ maxX - minX, maxY - minY, maxZ - minZ };
+//    }
+//    XMFLOAT3 GetHalfSize() const {
+//        return XMFLOAT3{ (maxX - minX) * 0.5f, (maxY - minY) * 0.5f, (maxZ - minZ) * 0.5f };
+//    }
+//    float GetRadius() const {
+//        XMFLOAT3 size = GetHalfSize();
+//        return std::max(std::max(size.x, size.y), size.z);
+//    }
+//};

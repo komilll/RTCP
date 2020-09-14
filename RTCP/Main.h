@@ -9,8 +9,8 @@
 class Main
 {
 public:
-	HRESULT InitializeWindow(HINSTANCE hInstance, std::shared_ptr<DeviceManager> deviceManager);
-	HRESULT Run(std::shared_ptr<DeviceManager> deviceManager, std::shared_ptr<Renderer> renderer);
+	HRESULT InitializeWindow(HINSTANCE hInstance, std::shared_ptr<Renderer> renderer);
+	HRESULT Run(std::shared_ptr<Renderer> renderer);
 	HWND GetWindowHandle() const { return m_hwnd; };
 
 private:
@@ -30,7 +30,6 @@ private:
 	bool m_fullscreen = false;
 };
 
-static std::shared_ptr<DeviceManager> m_deviceManager;
 static std::shared_ptr<Renderer> m_renderer;
 static std::shared_ptr<InputManager> m_inputManager;
 static std::shared_ptr<GuiManager> m_guiManager;
