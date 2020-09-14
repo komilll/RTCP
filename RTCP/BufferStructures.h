@@ -40,11 +40,12 @@ static_assert((sizeof(AoConstantBuffer) % 256) == 0, "Ao Constant Buffer size mu
 
 typedef struct _giConstantBuffer
 {
+	int useDirect = 1;
 	int useIndirect = 1;
 	int accFrames = 0;
 	float roughness = 0.75f;
 	float metallic = 0.0f;
-	float padding[60] = {};
+	float padding[59] = {};
 } GiConstantBuffer;
 static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
 

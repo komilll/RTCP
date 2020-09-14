@@ -37,11 +37,12 @@ void Renderer::OnInit(HWND hwnd)
     m_scissorRect.bottom = static_cast<LONG>(m_windowHeight);
 
     // Buddha
-    m_cameraPosition = XMFLOAT3{ 26.0f, 6.8f, 10.0f };
-    m_cameraRotation = XMFLOAT3{ 14.5f, -89.5f, 0.0f };
+    //m_cameraPosition = XMFLOAT3{ 26.0f, 6.8f, 10.0f };
+    //m_cameraRotation = XMFLOAT3{ 14.5f, -89.5f, 0.0f };
 
-    //m_cameraPosition = XMFLOAT3{ 0.1f, 1.4f, -3.7f };
-    //m_cameraRotation = XMFLOAT3{ 10.5f, -29.5f, 0.0f };
+    // Pink room
+    m_cameraPosition = XMFLOAT3{ 0.1f, 1.4f, -3.7f };
+    m_cameraRotation = XMFLOAT3{ 10.5f, -29.5f, 0.0f };
     CreateViewAndPerspective();
 
     // Preparing devices, resources, views to enable rendering
@@ -153,6 +154,7 @@ void Renderer::OnUpdate()
     // Update gi buffer
     {
         m_giBuffer.value.useIndirect = USE_GI_INDIRECT ? 1 : 0;
+        m_giBuffer.value.useDirect = USE_GI_DIRECT ? 1 : 0;
         if (m_resetFrameGI) {
             m_resetFrameGI = false;
             m_giBuffer.value.accFrames = 0;
@@ -429,8 +431,8 @@ void Renderer::LoadAssets()
     {
         m_modelCube = std::shared_ptr<ModelClass>(new ModelClass("cube.obj", m_device, m_commandList));
         m_modelSphere = std::shared_ptr<ModelClass>(new ModelClass("sphere.obj", m_device, m_commandList));
-        m_modelBuddha = std::shared_ptr<ModelClass>(new ModelClass("happy-buddha.fbx", m_device, m_commandList));
-        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("SunTemple.fbx", m_device, m_commandList, modelHeap));
+        //m_modelBuddha = std::shared_ptr<ModelClass>(new ModelClass("happy-buddha.fbx", m_device, m_commandList));
+        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("pink_room.fbx", m_device, m_commandList, modelHeap));
     }
 
     // Prepare shader compilator
@@ -498,7 +500,7 @@ void Renderer::LoadAssets()
     CreateTexture2D(m_rtSpecularTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
     // Preparation of raytracing - create resources objects with RTPSO
-    const std::shared_ptr<ModelClass> model = m_modelBuddha;
+    const std::shared_ptr<ModelClass> model = m_modelPinkRoom;
     PrepareRaytracingResources(model);
     PrepareRaytracingResourcesAO(model);
     PrepareRaytracingResourcesLambert(model);
@@ -1114,7 +1116,7 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
 
     m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, groupIndirect}));
 
-    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer);
+    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer, {}, sizeof(XMFLOAT4) * 2);
 }
 
 void Renderer::PrepareRaytracingResourcesGGX(const std::shared_ptr<ModelClass> model)

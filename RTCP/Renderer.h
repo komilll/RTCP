@@ -127,6 +127,7 @@ private:
 	bool DO_RAYTRACING = true;
 	bool USE_AO_FRAME_JITTER = false;
 	bool USE_AO_THIN_LENS = false;
+	bool USE_GI_DIRECT = true;
 	bool USE_GI_INDIRECT = false;
 	bool RENDER_ONLY_RTAO = false;
 	bool RENDER_LAMBERT = false;

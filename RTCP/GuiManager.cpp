@@ -51,6 +51,10 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
             }
         }
 
+        if (ImGui::Checkbox("GI direct diffuse", &m_renderer->USE_GI_DIRECT)) {
+            m_renderer->m_resetFrameGI = true;
+        }
+
         if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_GI_INDIRECT)) {
             m_renderer->m_resetFrameGI = true;
         }

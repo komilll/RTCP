@@ -7,6 +7,12 @@
 #include "ALL_CommonBuffers.hlsl"
 #include "PS_BRDF_Helper.hlsl"
 
+struct Light
+{
+	float3 positionWS;
+	float radius;
+};
+
 struct RayPayload
 {
 	float vis;
@@ -20,11 +26,12 @@ struct PayloadIndirect
 
 struct GiConstantBuffer
 {
+	int useDirect;
 	int useIndirect;
 	int accFrames;
 	float roughness;
 	float metallic;
-	float padding[60];
+	float padding[59];
 };
 
 struct LightConstantBuffer
@@ -78,6 +85,52 @@ float shadowRayVisibility(float3 origin, float3 dir, float tMin, float tMax)
 	return payload.vis;
 }
 
+float4 MonteCarloSpecular(float3 positionWS, float3 specularColor, float3 N, float3 V, float roughness, const uint sampleCount, Light light)
+{
+	uint2 LaunchIndex = DispatchRaysIndex().xy;
+	uint2 LaunchDimensions = DispatchRaysDimensions().xy;
+	float3 specularLighting = 0;
+    
+	float3 delta = light.positionWS - positionWS;
+	float distanceSquared = dot(delta, delta);
+	if (distanceSquared <= light.radius * light.radius)
+	{
+		return float4(1, 0, 1, 0);
+	}
+    
+	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount);
+	float t;
+    
+	for (uint i = 0; i < sampleCount; ++i)
+	{
+		float3 L = getCosHemisphereSample(seed, N);
+        
+        [flatten]
+		if (dot(N, L) < 0.0)
+			L = -L;
+        
+		float visibility = shadowRayVisibility(positionWS, L, 1e-4f, sqrt(distanceSquared));
+		
+		//if (IntersectLight(positionWS, L, light.positionWS, light.radius * light.radius, t))
+		{
+			const float3 H = normalize(V + L);
+			const float NoL = saturate(dot(N, L));
+			const float NoV = saturate(dot(N, V));
+			const float NoH = saturate(dot(N, H));
+			const float VoH = saturate(dot(V, H));
+        
+            //const float3 diffuse = Diffuse_Disney(NoV, NoL, LoH, roughness) * diffuseColor;
+			const float D = Specular_D_GGX(roughness, NoH);
+			const float G = Specular_G_GGX(roughness, NoV) * Specular_G_GGX(roughness, NoL);
+			const float3 F = Specular_F_Schlick(specularColor, VoH);
+			const float3 specular = F * (D * G);
+        
+			specularLighting += visibility * (specular / INV_2PI);
+		}
+	}
+	return float4(specularLighting / sampleCount, 1.0f);
+}
+
 float3 ggxDirect(inout uint rndSeed, float3 hit, float3 N, float3 V, float3 dif, float3 spec, float rough)
 {
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
@@ -90,6 +143,10 @@ float3 ggxDirect(inout uint rndSeed, float3 hit, float3 N, float3 V, float3 dif,
 	float lightIntensity = 1.0f;
 	
 	// Compute our lambertion term (N dot L)
+	//[flatten]
+	//if (dot(N, L) < 0.0)
+	//	L = -L;
+	
 	float NoL = saturate(dot(N, L));
 
 	// Shoot our shadow ray to our randomly selected light
@@ -98,13 +155,18 @@ float3 ggxDirect(inout uint rndSeed, float3 hit, float3 N, float3 V, float3 dif,
 	// Compute half vectors and additional dot products for GGX
 	float3 H = normalize(V + L);
 	float NoH = saturate(dot(N, H));
-	float LoH = saturate(dot(L, H));
-	float NoV = saturate(dot(N, V));
+	float VoH = saturate(dot(V, H));
+	const float NoV = abs(dot(N, V)) + 0.0001f; //avoid artifact - as in Frostbite
 
 	// Evaluate terms for our GGX BRDF model
 	float D = Specular_D_GGX(rough, NoH);
-	float G = Specular_G_SchlickGGX(rough, NoL) * Specular_G_SchlickGGX(rough, NoV);
-	float3 F = Specular_F_Schlick(spec, LoH);
+	float G = Specular_G_GGX(rough, NoL) * Specular_G_GGX(rough, NoV);
+	float3 F = Specular_F_Schlick(spec, VoH);
+
+	const float numeratorBRDF = D * F * G;
+	const float denominatorBRDF = max((4.0f * max(NoV, 0.0f) * max(NoL, 0.0f)), 0.001f);
+	const float BRDF = numeratorBRDF / denominatorBRDF;
+	const float3 sunLight = numeratorBRDF * NoL * lightIntensity * shadowMult;
 
 	// Evaluate the Cook-Torrance Microfacet BRDF model
 	//     Cancel out NdotL here & the next eq. to avoid catastrophic numerical precision issues.
@@ -147,6 +209,8 @@ void RayGen()
 	
 	float3 shadeColor = albedo.rgb / PI;
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
+	float3 V = normalize(g_sceneCB.cameraPosition.xyz - pixelWorldSpacePosition.xyz);
+	
 	if (lightsCount > 0)
 	{
 		uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount);
@@ -160,7 +224,6 @@ void RayGen()
 			
 		//float shadowMult = shadowRayVisibility(pixelWorldSpacePosition, toLight, 1e-4f, distToLight);
 		//shadeColor += shadowMult * NoL * albedo.rgb / PI;
-		float3 V = normalize(g_sceneCB.cameraPosition.xyz - pixelWorldSpacePosition.xyz);
 		shadeColor = ggxDirect(seed, pixelWorldSpacePosition, normalAndDepth.xyz, V, diffuseColor, specularColor, roughness);
 		
 		//if (g_giCB.useIndirect == 1)
@@ -174,7 +237,11 @@ void RayGen()
 	}
 	
 	float4 prevScene = RTOutput[LaunchIndex];
+	Light light;
+	light.positionWS = g_lightCB.lightPositionAndType[0].xyz;
+	light.radius = 2.0f;
 	float4 finalColor = float4(shadeColor, 1.0f);
+	//float4 finalColor = MonteCarloSpecular(pixelWorldSpacePosition, specularColor, normalAndDepth.xyz, V, roughness, 64, light);
 	finalColor = ((float) g_giCB.accFrames * prevScene + finalColor) / ((float) g_giCB.accFrames + 1.0f);
 	RTOutput[LaunchIndex] = finalColor;
 }

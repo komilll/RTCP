@@ -15,13 +15,17 @@ struct PayloadIndirect
 {
 	float3 color;
 	uint rndSeed;
+	int pathLength;
 };
 
 struct GiConstantBuffer
 {
+	int useDirect;
 	int useIndirect;
 	int accFrames;
-	float padding[62];
+	float roughness;
+	float metallic;
+	float padding[59];
 };
 
 struct LightConstantBuffer
@@ -95,7 +99,7 @@ void RayGen()
 		return;
 	}
 	
-	float3 shadeColor = albedo.rgb / PI;
+	float3 shadeColor = g_giCB.useDirect == 1 ? albedo.rgb / PI : 0;
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
 	if (lightsCount > 0)
 	{
@@ -109,7 +113,10 @@ void RayGen()
 		float NoL = saturate(dot(normalAndDepth.xyz, toLight));
 			
 		float shadowMult = shadowRayVisibility(pixelWorldSpacePosition, toLight, 1e-4f, distToLight);
-		shadeColor += shadowMult * NoL * albedo.rgb / PI;
+		if (g_giCB.useDirect == 1)
+		{
+			shadeColor += shadowMult * NoL * albedo.rgb / PI;
+		}
 		
 		if (g_giCB.useIndirect == 1)
 		{
@@ -146,6 +153,7 @@ void MissIndirect(inout PayloadIndirect payload : SV_RayPayload)
 	rayDir.z = -rayDir.z;
 	
 	payload.color = skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+	payload.pathLength++;
 }
 
 [shader("closesthit")]
@@ -181,6 +189,14 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
 
 	payload.color = visibility * NoL * albedo.rgb / PI;
+	payload.pathLength++;
+	
+	//if (payload.pathLength < 2)
+	//{
+	//	nextRand(payload.rndSeed);
+	//	float3 bounceDir = getCosHemisphereSample(payload.rndSeed, triangleNormal);
+	//	payload.color += shootIndirectRay(hitPos, bounceDir, 1e-4f, payload.rndSeed);
+	//}
 }
 
 #endif //_RT_LAMBERTIAN_HLSL_
