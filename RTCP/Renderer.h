@@ -70,6 +70,8 @@ private:
 	void CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ComPtr<ID3D12RootSignature>& rootSignature);
 	void CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, CD3DX12_ROOT_PARAMETER rootParameters[], CD3DX12_STATIC_SAMPLER_DESC samplers[], D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags, ID3D12RootSignature*& rootSignature);
 	
+	void CreateCBV(ComPtr<ID3D12Resource>& resource, UINT bufferSize, D3D12_CPU_DESCRIPTOR_HANDLE& handle) const;
+
 	static void CreateSRV(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc);
 	static void CreateSRV_Texture2D(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels = 1, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2D, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING });
 	static void CreateSRV_Texture2DArray(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, int mipLevels = 1, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = { DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_SRV_DIMENSION_TEXTURE2DARRAY, D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING });
@@ -115,8 +117,8 @@ private:
 
 private:
 	// CONST PROPERTIES
-	static constexpr float Z_NEAR = 0.01f;
-	static constexpr float Z_FAR = 200.0f;
+	static constexpr float Z_NEAR = 10.f;
+	static constexpr float Z_FAR = 20000.0f;
 	static constexpr int m_frameCount = 2;
 	static constexpr int m_windowWidth = 1920;
 	static constexpr int m_windowHeight = 1080;
@@ -130,8 +132,8 @@ private:
 	bool USE_GI_DIRECT = true;
 	bool USE_GI_INDIRECT = false;
 	bool RENDER_ONLY_RTAO = false;
-	bool RENDER_LAMBERT = false;
-	bool RENDER_GGX = true;
+	bool RENDER_LAMBERT = true;
+	bool RENDER_GGX = false;
 
 	// Frame data
 	UINT64 m_currentCPUFrame = 0;
@@ -181,12 +183,16 @@ private:
 	// Descriptor heaps
 	ComPtr<ID3D12DescriptorHeap> m_rtvDescriptorHeap;
 	ComPtr<ID3D12DescriptorHeap> m_srvHeap;
+	ComPtr<ID3D12DescriptorHeap> m_heapPostprocess;
+	ComPtr<ID3D12DescriptorHeap> m_cbvHeapPostprocess;
 
 	// Root signatures/PSO
 	ComPtr<ID3D12RootSignature> m_rootSignature = NULL;
 	ComPtr<ID3D12PipelineState> m_pipelineState = NULL;
 	ComPtr<ID3D12RootSignature> m_rootSignatureSkybox = NULL;
 	ComPtr<ID3D12PipelineState> m_pipelineStateSkybox = NULL;
+	ComPtr<ID3D12RootSignature> m_rootSignaturePostprocess = NULL;
+	ComPtr<ID3D12PipelineState> m_psoPostprocess = NULL;
 #pragma endregion
 
 #pragma region Resource variables
@@ -203,6 +209,7 @@ private:
 	CBuffer<ConstantBufferStruct> m_constantBuffer;
 	CBuffer<ConstantBufferStruct> m_constantBufferSkybox;
 	CBuffer<LightConstantBuffer> m_lightBuffer;
+	CBuffer<PostprocessConstantBuffer> m_postprocessBuffer;
 
 	// Textures
 	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
@@ -214,6 +221,7 @@ private:
 	std::shared_ptr<ModelClass> m_modelSphere = NULL;
 	std::shared_ptr<ModelClass> m_modelBuddha = NULL;
 	std::shared_ptr<ModelClass> m_modelPinkRoom = NULL;
+	std::shared_ptr<ModelClass> m_modelFullscreen = NULL;
 #pragma endregion
 	
 #pragma region Raytracing variables

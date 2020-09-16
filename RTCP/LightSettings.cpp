@@ -44,6 +44,9 @@ void LightSettings::LoadLightFromFile()
 				m_lights.push_back({});
 			}
 			int el = static_cast<int>(m_lights.size()) - 1;
+			if (results[0] == "") {
+				return;
+			}
 
 			// Type
 			if (i == 0)

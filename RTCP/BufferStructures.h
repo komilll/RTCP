@@ -45,7 +45,9 @@ typedef struct _giConstantBuffer
 	int accFrames = 0;
 	float roughness = 0.75f;
 	float metallic = 0.0f;
-	float padding[59] = {};
+	int bounceCount = 1;
+	int maxFrames = 100;
+	float padding[57] = {};
 } GiConstantBuffer;
 static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
 
@@ -72,5 +74,12 @@ typedef struct _lightConstantBuffer
 	XMFLOAT4 lightPositionAndType[16];
 } LightConstantBuffer;
 static_assert((sizeof(LightConstantBuffer) % 256) == 0, "Light Constant Buffer size must be 256-byte aligned");
+
+typedef struct _postprocessConstantBuffer
+{
+	float exposure = -10.f;
+	float padding[63];
+} PostprocessConstantBuffer;
+static_assert((sizeof(PostprocessConstantBuffer) % 256) == 0, "Postprocess Constant Buffer size must be 256-byte aligned");
 
 #endif // !_BUFFER_STRUCTURES_H_

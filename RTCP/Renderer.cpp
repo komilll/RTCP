@@ -41,8 +41,13 @@ void Renderer::OnInit(HWND hwnd)
     //m_cameraRotation = XMFLOAT3{ 14.5f, -89.5f, 0.0f };
 
     // Pink room
-    m_cameraPosition = XMFLOAT3{ 0.1f, 1.4f, -3.7f };
-    m_cameraRotation = XMFLOAT3{ 10.5f, -29.5f, 0.0f };
+    //m_cameraPosition = XMFLOAT3{ 0.1f, 1.4f, -3.7f };
+    //m_cameraRotation = XMFLOAT3{ 10.5f, -29.5f, 0.0f };
+
+    // Sun Temple
+    m_cameraPosition = XMFLOAT3{ -393.1f, 794.0f, 3574.1f };
+    m_cameraRotation = XMFLOAT3{ 20.5f, -208.5f, 0.0f };
+
     CreateViewAndPerspective();
 
     // Preparing devices, resources, views to enable rendering
@@ -160,7 +165,10 @@ void Renderer::OnUpdate()
             m_giBuffer.value.accFrames = 0;
         }
         else {
-            m_giBuffer.value.accFrames++;
+            if ((m_giBuffer.value.accFrames < m_giBuffer.value.maxFrames || m_giBuffer.value.maxFrames == 0))
+            {
+                m_giBuffer.value.accFrames++;
+            }
         }
         m_giBuffer.Update();
     }
@@ -190,6 +198,8 @@ void Renderer::OnUpdate()
             m_lightSettings->SaveLightToFile();
         }
     }
+
+    m_postprocessBuffer.Update();
 }
 
 void Renderer::OnDestroy()
@@ -350,6 +360,22 @@ void Renderer::LoadAssets()
     //    featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
     //}
 
+    // Create an postprocess root signature.
+    {
+        CD3DX12_ROOT_PARAMETER rootParameters[2] = {};
+        CD3DX12_DESCRIPTOR_RANGE cbvRange{ D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0 };
+        CD3DX12_DESCRIPTOR_RANGE srvRange{ D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0 };
+        rootParameters[0].InitAsDescriptorTable(1, &cbvRange, D3D12_SHADER_VISIBILITY_PIXEL);
+        rootParameters[1].InitAsDescriptorTable(1, &srvRange, D3D12_SHADER_VISIBILITY_PIXEL);
+
+        D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags = ROOT_SIGNATURE_PIXEL;
+
+        CD3DX12_STATIC_SAMPLER_DESC samplers[1] = {};
+        samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
+
+        CreateRootSignatureRTCP(_countof(rootParameters), _countof(samplers), rootParameters, samplers, rootSignatureFlags, m_rootSignaturePostprocess);
+    }
+
     // Create an empty root signature.
     {
         CD3DX12_ROOT_PARAMETER rootParameters[2] = {};
@@ -387,6 +413,21 @@ void Renderer::LoadAssets()
 #else
     UINT compileFlags = 0;
 #endif
+
+    // Create postprocessing pipeline
+    {
+        // Prepare shaders
+        ComPtr<ID3DBlob> vertexShader;
+        ComPtr<ID3DBlob> pixelShader;
+        Compile_Shader(L"Shaders/VS_Postprocess.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "vs_5_1", 0, 0, &vertexShader);
+        Compile_Shader(L"Shaders/PS_Postprocess.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", "ps_5_1", 0, 0, &pixelShader);
+
+        // Preprare layout, DSV and create PSO
+        auto inputElementDescs = CreateBasicInputLayout();
+        CD3DX12_DEPTH_STENCIL_DESC1 depthStencilDesc = CreateDefaultDepthStencilDesc();
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = CreateDefaultPSO(inputElementDescs, vertexShader, pixelShader, depthStencilDesc, m_rootSignaturePostprocess);
+        ThrowIfFailed(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psoPostprocess)));
+    }
 
     // Create the pipeline state, which includes compiling and loading shaders.
     {
@@ -432,7 +473,9 @@ void Renderer::LoadAssets()
         m_modelCube = std::shared_ptr<ModelClass>(new ModelClass("cube.obj", m_device, m_commandList));
         m_modelSphere = std::shared_ptr<ModelClass>(new ModelClass("sphere.obj", m_device, m_commandList));
         //m_modelBuddha = std::shared_ptr<ModelClass>(new ModelClass("happy-buddha.fbx", m_device, m_commandList));
-        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("pink_room.fbx", m_device, m_commandList, modelHeap));
+        m_modelPinkRoom = std::shared_ptr<ModelClass>(new ModelClass("SunTemple.fbx", m_device, m_commandList, modelHeap));
+        m_modelFullscreen = std::shared_ptr<ModelClass>(new ModelClass());
+        m_modelFullscreen->SetFullScreenRectangleModel(m_device, m_commandList);
     }
 
     // Prepare shader compilator
@@ -482,6 +525,8 @@ void Renderer::LoadAssets()
     {
         //CreateTextureFromFileRTCP(m_pebblesTexture, m_commandList, L"Pebles.png", uploadHeap, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         //CreateSRV_Texture2DArray(m_modelPinkRoom->GetTextureResourcesAlbedo(), m_srvHeap.Get(), 0, m_device.Get());
+        CreateSRV_Texture2D(m_rtLambertTexture, m_srvHeap.Get(), 0, m_device.Get());
+        CreateUploadHeapRTCP(m_device.Get(), m_postprocessBuffer);
     }
 
     ComPtr<ID3D12Resource> skyboxUploadHeap;
@@ -498,6 +543,24 @@ void Renderer::LoadAssets()
     CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     CreateTexture2D(m_rtAlbedoTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     CreateTexture2D(m_rtSpecularTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+    // Create postprocess descriptor heaps
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
+        heapDesc.NumDescriptors = 2;
+        heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        ThrowIfFailed(m_device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_heapPostprocess)));
+
+        D3D12_CPU_DESCRIPTOR_HANDLE handle = m_heapPostprocess->GetCPUDescriptorHandleForHeapStart();
+        UINT handleIncrement = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+        D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { m_postprocessBuffer.resource->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, static_cast<UINT>(sizeof(m_postprocessBuffer.value))) };
+        m_device->CreateConstantBufferView(&cbvDesc, handle);
+        
+        handle.ptr += handleIncrement;
+        m_device->CreateShaderResourceView(m_rtLambertTexture.Get(), &GetDefaultSRVTexture2DDesc(), handle);
+    }
 
     // Preparation of raytracing - create resources objects with RTPSO
     const std::shared_ptr<ModelClass> model = m_modelPinkRoom;
@@ -613,6 +676,44 @@ void Renderer::PopulateCommandList()
         // Unrelated to any algortihms
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
         m_profiler->EndProfile(m_commandList.Get(), fullFrameIdx, m_currentFrameIdx);
+
+        /* RENDER POSTPROCESS (rasterize) */
+        {
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
+            m_commandList->SetPipelineState(m_psoPostprocess.Get());
+            m_commandList->SetGraphicsRootSignature(m_rootSignaturePostprocess.Get());
+
+            ID3D12DescriptorHeap* ppHeaps[] = { m_heapPostprocess.Get() };
+            m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+            CD3DX12_GPU_DESCRIPTOR_HANDLE cbvHandle(m_heapPostprocess->GetGPUDescriptorHandleForHeapStart(), 0, m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+            CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_heapPostprocess->GetGPUDescriptorHandleForHeapStart(), 1, m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+            m_commandList->SetGraphicsRootDescriptorTable(0, cbvHandle);
+            m_commandList->SetGraphicsRootDescriptorTable(1, srvHandle);
+
+            m_commandList->RSSetViewports(1, &m_viewport);
+            m_commandList->RSSetScissorRects(1, &m_scissorRect);
+
+            // Indicate that the back buffer will be used as a render target.
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+            CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+            CD3DX12_CPU_DESCRIPTOR_HANDLE dsvHandle(m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+            m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
+
+            // Record commands.
+            const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f };
+            m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+            m_commandList->ClearDepthStencilView(m_dsvHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+            m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            m_commandList->IASetVertexBuffers(0, 1, &m_modelFullscreen->GetVertexBufferView());
+            m_commandList->DrawInstanced(m_modelFullscreen->GetIndicesCount(), 1, 0, 0);
+
+            // Indicate that the back buffer will now be used to present.
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT)); 
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+        }
     }
     else
     {
@@ -790,6 +891,12 @@ void Renderer::CreateRootSignatureRTCP(UINT rootParamCount, UINT samplerCount, C
     ComPtr<ID3DBlob> error;
     ThrowIfFailed(D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error));
     ThrowIfFailed(m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+}
+
+void Renderer::CreateCBV(ComPtr<ID3D12Resource>& resource, UINT bufferSize, D3D12_CPU_DESCRIPTOR_HANDLE& handle) const
+{
+    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = { resource->GetGPUVirtualAddress(), ALIGN(D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT, bufferSize) };
+    m_device->CreateConstantBufferView(&cbvDesc, handle);
 }
 
 void Renderer::CreateSRV(ComPtr<ID3D12Resource>& resource, ID3D12DescriptorHeap* srvHeap, int srvIndex, ID3D12Device* device, D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc)

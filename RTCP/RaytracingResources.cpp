@@ -719,7 +719,7 @@ void RaytracingResources::CreateRTPSO(ID3D12Device5* device, size_t maxPayloadSi
 
     // Add a state subobject for the ray tracing pipeline config
     {
-        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig = { 2 }; // Max Trace Recursion Depth
+        D3D12_RAYTRACING_PIPELINE_CONFIG pipelineConfig = { 10 }; // Max Trace Recursion Depth
         D3D12_STATE_SUBOBJECT pipelineConfigObject = { D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, &pipelineConfig };
         subobjects[index++] = pipelineConfigObject; 
     }

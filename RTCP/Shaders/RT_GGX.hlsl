@@ -31,7 +31,9 @@ struct GiConstantBuffer
 	int accFrames;
 	float roughness;
 	float metallic;
-	float padding[59];
+	int bounceCount;
+	int maxFrames;
+	float padding[57];
 };
 
 struct LightConstantBuffer

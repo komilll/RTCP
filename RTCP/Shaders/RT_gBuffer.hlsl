@@ -8,7 +8,7 @@
 
 struct RayPayload
 {
-	int empty;
+	bool miss;
 };
 
 ////
@@ -40,8 +40,17 @@ void RayGen()
 	GenerateCameraRay(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, g_sceneCB.projectionToWorld, origin, rayDir);
 
 	RayDesc ray = { origin, 1e-4f, rayDir, 1e+38f };
-	RayPayload payload = { 0 };
+	RayPayload payload = { false };
 	TraceRay(SceneBVH, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, payload);
+	
+	if (payload.miss)
+	{
+		rayDir.z = -rayDir.z;
+	
+		RTOutputAlbedo[DispatchRaysIndex().xy] = float4(skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb, 0);
+		RTOutputNormal[DispatchRaysIndex().xy] = float4(0, 0, 0, 0);
+		RTOutputSpecRoughness[DispatchRaysIndex().xy] = float4(0, 0, 0, 0);
+	}
 }
 
 [shader("closesthit")]
@@ -81,12 +90,13 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 [shader("miss")]
 void Miss(inout RayPayload payload)
 {
-	float3 rayDir = WorldRayDirection();
-	rayDir.z = -rayDir.z;
-
-	RTOutputAlbedo[DispatchRaysIndex().xy] = float4(skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb, 0);
-	RTOutputNormal[DispatchRaysIndex().xy] = float4(0, 0, 0, 0);
-	RTOutputSpecRoughness[DispatchRaysIndex().xy] = float4(0, 0, 0, 0);
+	payload.miss = true;
+	//float3 rayDir = WorldRayDirection();
+	//rayDir.z = -rayDir.z;
+	
+	//RTOutputAlbedo[DispatchRaysIndex().xy] = float4(skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb, 0);
+	//RTOutputNormal[DispatchRaysIndex().xy] = float4(0, 0, 0, 0);
+	//RTOutputSpecRoughness[DispatchRaysIndex().xy] = float4(0, 0, 0, 0);
 }
 
 #endif //_RT_G_BUFFER_HLSL_

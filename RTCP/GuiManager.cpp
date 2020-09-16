@@ -54,8 +54,10 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
         if (ImGui::Checkbox("GI direct diffuse", &m_renderer->USE_GI_DIRECT)) {
             m_renderer->m_resetFrameGI = true;
         }
-
         if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_GI_INDIRECT)) {
+            m_renderer->m_resetFrameGI = true;
+        }
+        if (ImGui::SliderInt("GI Max frame count", &m_renderer->m_giBuffer.value.maxFrames, 0, 1000)) {
             m_renderer->m_resetFrameGI = true;
         }
 
@@ -84,6 +86,15 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
         }
         if (ImGui::SliderFloat("Material metallic", &m_renderer->m_giBuffer.value.metallic, 0.0f, 1.0f, "%.2f")) {
             m_renderer->m_resetFrameGI = true;
+        }
+        if (ImGui::SliderInt("Indirect bounce count", &m_renderer->m_giBuffer.value.bounceCount, 1, 8)) {
+            m_renderer->m_resetFrameGI = true;
+        }
+
+        // Postprocess section
+        ImGui::Separator();
+        ImGui::Text("Postprocess settings:");
+        if (ImGui::SliderFloat("Exposure", &m_renderer->m_postprocessBuffer.value.exposure, -50.0f, 20.0f, "%.1f")) {
         }
 
         ImGui::Text(m_renderer->m_profiler->GetOutputString());
