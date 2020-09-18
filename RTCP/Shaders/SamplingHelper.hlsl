@@ -51,4 +51,19 @@ float3 getCosHemisphereSample(inout uint randSeed, float3 hitNorm)
 	return tangent * (r * cos(phi).x) + bitangent * (r * sin(phi)) + hitNorm.xyz * sqrt(1 - randVal.x);
 }
 
+// Modification of above NVIDIA function - https://github.com/NVIDIAGameWorks/GettingStartedWithRTXRayTracing/blob/master/11-OneShadowRayPerPixel/Data/Tutorial11/diffusePlus1ShadowUtils.hlsli
+float3 getCosHemisphereSample(inout uint randSeed, float3 hitNorm, float3 tangent, float3 bitangent)
+{
+	// Get 2 random numbers to select our sample with
+	float2 randVal = float2(nextRand(randSeed), nextRand(randSeed));
+
+	// Cosine weighted hemisphere sample from RNG
+	float r = sqrt(randVal.x);
+	float phi = 2.0f * 3.14159265f * randVal.y;
+
+	// Get our cosine-weighted hemisphere lobe sample direction
+	return tangent * (r * cos(phi).x) + bitangent * (r * sin(phi)) + hitNorm.xyz * sqrt(1 - randVal.x);
+}
+
+
 #endif // _SAMPLING_HELPER_HLSL_

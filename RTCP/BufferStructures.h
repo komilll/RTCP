@@ -46,8 +46,9 @@ typedef struct _giConstantBuffer
 	float roughness = 0.75f;
 	float metallic = 0.0f;
 	int bounceCount = 1;
+	int sqrtMaxFrames = 10;
 	int maxFrames = 100;
-	float padding[57] = {};
+	float padding[56] = {};
 } GiConstantBuffer;
 static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
 

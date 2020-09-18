@@ -17,6 +17,7 @@ HRESULT Main::InitializeWindow(HINSTANCE hInstance, std::shared_ptr<Renderer> re
 
     m_hwnd = CreateWindow(m_windowClassName.c_str(), hInstance, L"RTCP", m_renderer->GetWindowSize().x, m_renderer->GetWindowSize().y);
     ::GetWindowRect(m_hwnd, &m_windowRect);
+    ToggleFullscreen();
 
     self = this;
 

@@ -57,8 +57,9 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
         if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_GI_INDIRECT)) {
             m_renderer->m_resetFrameGI = true;
         }
-        if (ImGui::SliderInt("GI Max frame count", &m_renderer->m_giBuffer.value.maxFrames, 0, 1000)) {
+        if (ImGui::SliderInt("GI Max sqrt frame count", &m_renderer->m_giBuffer.value.sqrtMaxFrames, 1, 100)) {
             m_renderer->m_resetFrameGI = true;
+            m_renderer->m_giBuffer.value.maxFrames = m_renderer->m_giBuffer.value.sqrtMaxFrames * m_renderer->m_giBuffer.value.sqrtMaxFrames;
         }
 
         if (ImGui::CollapsingHeader("Raytracing shading model", ImGuiTreeNodeFlags_DefaultOpen))
