@@ -19,6 +19,21 @@ inline void GenerateCameraRay(uint2 index, uint2 dimensions, float4x4 projection
 	direction = normalize(world.xyz - origin);
 }
 
+inline void GenerateCameraRay(uint2 index, uint2 dimensions, float4x4 projectionToWorld, inout float3 origin, out float3 direction, in float2 pixelOffset)
+{
+	float2 xy = index + pixelOffset; // center in the middle of the pixel.
+	float2 screenPos = (xy / (float2) dimensions) * 2.0 - 1.0;
+
+    // Invert Y for DirectX-style coordinates.
+	screenPos.y = -screenPos.y;
+
+    // Unproject the pixel coordinate into a ray.
+	float4 world = mul(float4(screenPos, 0, 1), projectionToWorld);
+
+	world.xyz /= world.w;
+	direction = normalize(world.xyz - origin);
+}
+
 inline void GenerateCameraRay(uint2 index, uint2 dimensions, float4x4 projectionToWorld, inout float3 origin, out float3 direction, in SceneConstantBuffer scene, in
 CameraConstantBuffer camera)
 {

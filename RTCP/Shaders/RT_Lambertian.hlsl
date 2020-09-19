@@ -15,6 +15,7 @@ struct PayloadIndirect
 {
 	float3 color;
 	uint rndSeed;
+	uint rndSeed2;
 	int pathLength;
 };
 
@@ -87,10 +88,12 @@ float shadowRayVisibility(float3 origin, float3 dir, float tMin, float tMax)
 	RayDesc visRay = { origin, tMin, dir, tMax };
 	RayPayload payload;
 	payload.vis = 0.0f;
-	TraceRay(SceneBVH, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 0, 1, 0, visRay, payload);
+	TraceRay(SceneBVH, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 0, 2, 0, visRay, payload);
 	
 	return payload.vis;
 }
+
+//#define uniformSampling
 
 [shader("raygeneration")]
 void RayGen()
@@ -112,19 +115,27 @@ void RayGen()
 	}
 	
 	// Calculate primary ray direction
-	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount);
+	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 16);
+	uint seed2 = 0;
+	float2 offset = float2(0, 0);
+	#ifdef uniformSampling
+		seed2 = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 17);
+		offset = HammersleyDistribution(g_giCB.accFrames, g_giCB.maxFrames, uint2(seed, seed2));
+	#endif
+	
 	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
 	float3 primaryRayDirection;
-	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection);
+	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection, offset);
 	
 	// Prepare payload
 	PayloadIndirect indirectPayload;
 	indirectPayload.color = float3(0, 0, 0);
 	indirectPayload.rndSeed = seed;
+	indirectPayload.rndSeed2 = seed2;
 	indirectPayload.pathLength = 0;
 		
 	// Calculate pixel color in current pass and merge with previous frames
-	float4 finalColor = float4(shootIndirectRay(primaryRayOrigin, primaryRayDirection, 1e-4f, indirectPayload), 1.0f);
+	float4 finalColor = float4(shootIndirectRay(primaryRayOrigin, primaryRayDirection, 1e-3f, indirectPayload), 1.0f);
 	float4 prevScene = RTOutput[LaunchIndex];
 	finalColor = ((float) g_giCB.accFrames * prevScene + finalColor) / ((float) g_giCB.accFrames + 1.0f);
 	RTOutput[LaunchIndex] = finalColor;
@@ -175,7 +186,7 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 		
 		// Check visibility
 		float NoL = saturate(dot(triangleNormal.xyz, toLight));
-		float visibility = shadowRayVisibility(hitPos, toLight, 1e-4f, distToLight);
+		float visibility = shadowRayVisibility(hitPos, toLight, 1e-3f, distToLight);
 
 		// Calculate light contribution to point in world (diffuse lambertian term)
 		payload.color += visibility * NoL * albedo.rgb * INV_PI;
@@ -187,17 +198,25 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 		if (payload.pathLength < g_giCB.bounceCount)
 		{
 			// Find next direction
-			float3 rayDirWS = getCosHemisphereSample(payload.rndSeed, triangleNormal, triangleTangent, triangleBitangent);
-			nextRand(payload.rndSeed);
+#ifdef uniformSampling
+				float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
+				float2 hammersley = HammersleyDistribution(payload.pathLength, g_giCB.bounceCount, uint2(payload.rndSeed, payload.rndSeed2));
+				float3 rayDirTS = UniformSampleHemisphere(hammersley.x, hammersley.y);
+				float3 rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
+			#else
+				float3 rayDirWS = getCosHemisphereSample(payload.rndSeed, triangleNormal, triangleTangent, triangleBitangent);
+				nextRand(payload.rndSeed);
+			#endif
 			
 			// Prepare payload
 			PayloadIndirect newPayload;
 			newPayload.pathLength = payload.pathLength + 1;
 			newPayload.rndSeed = payload.rndSeed;
+			newPayload.rndSeed2 = payload.rndSeed2;
 			newPayload.color = float3(0, 0, 0);
 			
 			// Calculate next ray bounce color contribution
-			float3 bounceColor = shootIndirectRay(hitPos, rayDirWS, 1e-4f, newPayload);
+			float3 bounceColor = shootIndirectRay(hitPos, rayDirWS, 1e-3f, newPayload);
 			payload.color += bounceColor * albedo.rgb;
 		}
 	}
