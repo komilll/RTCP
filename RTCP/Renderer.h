@@ -127,13 +127,20 @@ private:
 	// DEBUG PROPERTIES
 	bool FREEZE_CAMERA = false;
 	bool DO_RAYTRACING = true;
+
+	bool USE_SKYBOX = true;
+
 	bool USE_AO_FRAME_JITTER = false;
 	bool USE_AO_THIN_LENS = false;
-	bool USE_GI_DIRECT = true;
 	bool USE_GI_INDIRECT = false;
+	
 	bool RENDER_ONLY_RTAO = false;
 	bool RENDER_LAMBERT = true;
 	bool RENDER_GGX = false;
+	
+	bool SAMPLE_MJ = true;
+	bool SAMPLE_UNIFORM = false;
+	bool SAMPLE_RANDOM = false;
 
 	// Frame data
 	UINT64 m_currentCPUFrame = 0;

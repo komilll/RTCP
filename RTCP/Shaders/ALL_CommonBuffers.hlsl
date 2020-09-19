@@ -49,4 +49,19 @@ struct CameraConstantBuffer
 
 	float padding[47];
 };
+
+struct GiConstantBuffer
+{
+	int useIndirect;
+	int accFrames;
+	float roughness;
+	float metallic;
+	int bounceCount;
+	int sqrtMaxFrames;
+	int maxFrames;
+	int samplingType;
+	bool useSkybox;
+	float padding[55];
+};
+
 #endif //_COMMON_BUFFERS_HLSL_

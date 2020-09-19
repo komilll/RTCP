@@ -24,19 +24,6 @@ struct PayloadIndirect
 	uint rndSeed;
 };
 
-struct GiConstantBuffer
-{
-	int useDirect;
-	int useIndirect;
-	int accFrames;
-	float roughness;
-	float metallic;
-	int bounceCount;
-	int sqrtMaxFrames;
-	int maxFrames;
-	float padding[56];
-};
-
 struct LightConstantBuffer
 {
 	float4 lightDiffuseColor[16];

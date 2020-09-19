@@ -19,19 +19,6 @@ struct PayloadIndirect
 	int pathLength;
 };
 
-struct GiConstantBuffer
-{
-	int useDirect;
-	int useIndirect;
-	int accFrames;
-	float roughness;
-	float metallic;
-	int bounceCount;
-	int sqrtMaxFrames;
-	int maxFrames;
-	float padding[56];
-};
-
 struct LightConstantBuffer
 {
 	float4 lightDiffuseColor[16];
@@ -100,9 +87,9 @@ float shadowRayVisibility(float3 origin, float3 dir, float tMin, float tMax)
 	return payload.vis;
 }
 
-//#define uniformSampling
-#define mjSampling
-//#define randomSampling
+#define SAMPLE_UNIFORM 0
+#define SAMPLE_MJ 1
+#define SAMPLE_RANDOM 2
 
 [shader("raygeneration")]
 void RayGen()
@@ -127,17 +114,19 @@ void RayGen()
 	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 16);
 	uint seed2 = 0;
 	float2 offset = float2(0, 0);
-	#ifdef uniformSampling
+	if (g_giCB.samplingType == SAMPLE_UNIFORM)
+	{
 		seed2 = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 17);
 		offset = HammersleyDistribution(g_giCB.accFrames, g_giCB.maxFrames, uint2(seed, seed2));
-	#endif
-	#ifdef mjSampling
+	}
+	else if (g_giCB.samplingType == SAMPLE_MJ)
+	{
 		const uint pixelIdx = LaunchIndex.y * LaunchDimensions.x + LaunchIndex.x;
 		uint sampleSetIdx = 0;
 		offset = SamplePoint(pixelIdx, sampleSetIdx);
 		seed = pixelIdx;
 		seed2 = sampleSetIdx;
-	#endif
+	}
 	
 	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
 	float3 primaryRayDirection;
@@ -175,7 +164,10 @@ void MissIndirect(inout PayloadIndirect payload : SV_RayPayload)
 	// Use skybox as contribution if ray failed to hit geometry (right now, disabled for debug purposes)
 	float3 rayDir = WorldRayDirection();
 	rayDir.z = -rayDir.z;
-	//payload.color += skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+	if (g_giCB.useSkybox)
+	{
+		payload.color += skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+	}
 }
 
 [shader("closesthit")]
@@ -214,22 +206,26 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 		if (payload.pathLength < g_giCB.bounceCount)
 		{
 			// Find next direction
-			#ifdef uniformSampling
+			float3 rayDirWS = float3(0, 0, 0);
+			if (g_giCB.samplingType == SAMPLE_UNIFORM)
+			{
 				float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
 				float2 hammersley = HammersleyDistribution(payload.pathLength, g_giCB.bounceCount, uint2(payload.rndSeed, payload.rndSeed2));
 				float3 rayDirTS = UniformSampleHemisphere(hammersley.x, hammersley.y);
-				float3 rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
-			#endif
-			#ifdef mjSampling
+				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
+			}
+			else if (g_giCB.samplingType == SAMPLE_MJ)
+			{
 				float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
 				float2 brdfSample = SamplePoint(payload.rndSeed, payload.rndSeed2);
 				float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
-				float3 rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
-			#endif
-			#ifdef randomSampling
-				float3 rayDirWS = getCosHemisphereSample(payload.rndSeed, triangleNormal, triangleTangent, triangleBitangent);
+				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
+			}
+			else if (g_giCB.samplingType == SAMPLE_RANDOM)
+			{
+				rayDirWS = getCosHemisphereSample(payload.rndSeed, triangleNormal, triangleTangent, triangleBitangent);
 				nextRand(payload.rndSeed);
-			#endif
+			}
 			
 			// Prepare payload
 			PayloadIndirect newPayload;

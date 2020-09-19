@@ -159,7 +159,12 @@ void Renderer::OnUpdate()
     // Update gi buffer
     {
         m_giBuffer.value.useIndirect = USE_GI_INDIRECT ? 1 : 0;
-        m_giBuffer.value.useDirect = USE_GI_DIRECT ? 1 : 0;
+        m_giBuffer.value.useSkybox = USE_SKYBOX;
+        int samplingType = -1;
+        if (SAMPLE_UNIFORM) samplingType = 0;
+        if (SAMPLE_MJ) samplingType = 1;
+        if (SAMPLE_RANDOM) samplingType = 2;
+
         if (m_resetFrameGI) {
             m_resetFrameGI = false;
             m_giBuffer.value.accFrames = 0;

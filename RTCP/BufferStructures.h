@@ -40,7 +40,6 @@ static_assert((sizeof(AoConstantBuffer) % 256) == 0, "Ao Constant Buffer size mu
 
 typedef struct _giConstantBuffer
 {
-	int useDirect = 1;
 	int useIndirect = 1;
 	int accFrames = 0;
 	float roughness = 0.75f;
@@ -48,7 +47,9 @@ typedef struct _giConstantBuffer
 	int bounceCount = 1;
 	int sqrtMaxFrames = 10;
 	int maxFrames = 100;
-	float padding[56] = {};
+	int samplingType;
+	bool useSkybox;
+	float padding[55] = {};
 } GiConstantBuffer;
 static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
 
@@ -78,7 +79,7 @@ static_assert((sizeof(LightConstantBuffer) % 256) == 0, "Light Constant Buffer s
 
 typedef struct _postprocessConstantBuffer
 {
-	float exposure = -8.f;
+	float exposure = -9.f;
 	float padding[63];
 } PostprocessConstantBuffer;
 static_assert((sizeof(PostprocessConstantBuffer) % 256) == 0, "Postprocess Constant Buffer size must be 256-byte aligned");

@@ -51,7 +51,7 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
             }
         }
 
-        if (ImGui::Checkbox("GI direct diffuse", &m_renderer->USE_GI_DIRECT)) {
+        if (ImGui::Checkbox("GI Use skybox", &m_renderer->USE_SKYBOX)) {
             m_renderer->m_resetFrameGI = true;
         }
         if (ImGui::Checkbox("GI indirect diffuse", &m_renderer->USE_GI_INDIRECT)) {
@@ -62,6 +62,37 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
             m_renderer->m_giBuffer.value.maxFrames = m_renderer->m_giBuffer.value.sqrtMaxFrames * m_renderer->m_giBuffer.value.sqrtMaxFrames;
         }
 
+        if (ImGui::CollapsingHeader("Sampling type", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            if (ImGui::Selectable("Uniform sampling", &m_renderer->SAMPLE_UNIFORM))
+            {
+                m_renderer->m_resetFrameAO = true;
+                m_renderer->m_resetFrameGI = true;
+                m_renderer->m_resetFrameProfiler = true;
+                m_renderer->SAMPLE_RANDOM = false;
+                m_renderer->SAMPLE_MJ = false;
+                m_renderer->SAMPLE_UNIFORM = true;
+            }
+            if (ImGui::Selectable("Multi-jittered sampling", &m_renderer->SAMPLE_MJ))
+            {
+                m_renderer->m_resetFrameAO = true;
+                m_renderer->m_resetFrameGI = true;
+                m_renderer->m_resetFrameProfiler = true;
+                m_renderer->SAMPLE_RANDOM = false;
+                m_renderer->SAMPLE_MJ = true;
+                m_renderer->SAMPLE_UNIFORM = false;
+            }
+            if (ImGui::Selectable("Random cosine sampling", &m_renderer->SAMPLE_RANDOM))
+            {
+                m_renderer->m_resetFrameAO = true;
+                m_renderer->m_resetFrameGI = true;
+                m_renderer->m_resetFrameProfiler = true;
+                m_renderer->SAMPLE_RANDOM = true;
+                m_renderer->SAMPLE_MJ = false;
+                m_renderer->SAMPLE_UNIFORM = false;
+            }
+        }
+        ImGui::Separator();
         if (ImGui::CollapsingHeader("Raytracing shading model", ImGuiTreeNodeFlags_DefaultOpen))
         {
             if (ImGui::Selectable("Lambertian", &m_renderer->RENDER_LAMBERT))
