@@ -542,9 +542,9 @@ void Renderer::LoadAssets()
     }
 
     // Preparation of raytracing - create textures that will be used in RT
-    CreateTexture2D(m_rtAoTexture, m_windowWidth, m_windowHeight);
-    CreateTexture2D(m_rtGGXTexture, m_windowWidth, m_windowHeight);
-    CreateTexture2D(m_rtLambertTexture, m_windowWidth, m_windowHeight);
+    CreateTexture2D(m_rtAoTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT);
+    CreateTexture2D(m_rtGGXTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT);
+    CreateTexture2D(m_rtLambertTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT);
     CreateTexture2D(m_rtNormalTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     CreateTexture2D(m_rtAlbedoTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     CreateTexture2D(m_rtSpecularTexture, m_windowWidth, m_windowHeight, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_TEXTURE_LAYOUT_UNKNOWN, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -564,7 +564,7 @@ void Renderer::LoadAssets()
         m_device->CreateConstantBufferView(&cbvDesc, handle);
         
         handle.ptr += handleIncrement;
-        m_device->CreateShaderResourceView(m_rtLambertTexture.Get(), &GetDefaultSRVTexture2DDesc(), handle);
+        m_device->CreateShaderResourceView(m_rtLambertTexture.Get(), &GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT), handle);
     }
 
     // Preparation of raytracing - create resources objects with RTPSO
@@ -979,7 +979,7 @@ D3D12_GRAPHICS_PIPELINE_STATE_DESC Renderer::CreateDefaultPSO(BasicInputLayout i
     psoDesc.SampleMask = UINT_MAX;
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     psoDesc.NumRenderTargets = 1;
-    psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
     psoDesc.SampleDesc.Count = 1;
     psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 

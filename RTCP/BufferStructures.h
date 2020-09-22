@@ -79,7 +79,7 @@ static_assert((sizeof(LightConstantBuffer) % 256) == 0, "Light Constant Buffer s
 
 typedef struct _postprocessConstantBuffer
 {
-	float exposure = -9.f;
+	float exposure = -14.f;
 	float padding[63];
 } PostprocessConstantBuffer;
 static_assert((sizeof(PostprocessConstantBuffer) % 256) == 0, "Postprocess Constant Buffer size must be 256-byte aligned");

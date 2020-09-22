@@ -41,37 +41,6 @@ ModelClass::ModelClass(std::string path, ComPtr<ID3D12Device2> device, ComPtr<ID
 	// error
 #endif
 
-	//D3D12_RESOURCE_DESC textureDesc = {};
-	//textureDesc.MipLevels = 1;
-	//textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	//textureDesc.Width = 128;
-	//textureDesc.Height = 128;
-	//textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-	//textureDesc.DepthOrArraySize = 36;
-	//textureDesc.SampleDesc.Count = 1;
-	//textureDesc.SampleDesc.Quality = 0;
-	//textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-	//ThrowIfFailed(device->CreateCommittedResource(
-	//	&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-	//	D3D12_HEAP_FLAG_NONE,
-	//	&textureDesc,
-	//	D3D12_RESOURCE_STATE_COPY_DEST,
-	//	nullptr,
-	//	IID_PPV_ARGS(&m_resourceAlbedo)
-	//));
-
-	//ThrowIfFailed(device->CreateCommittedResource(
-	//	&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT),
-	//	D3D12_HEAP_FLAG_NONE,
-	//	&textureDesc,
-	//	D3D12_RESOURCE_STATE_COPY_DEST,
-	//	nullptr,
-	//	IID_PPV_ARGS(&m_resourceSpecRoughness)
-	//));
-
-	//m_diffuseTextures.resize(36);
-
 	LoadModel(path, device, commandList, uploadHeap);
 }
 
@@ -101,62 +70,6 @@ void ModelClass::LoadModel(std::string path, ComPtr<ID3D12Device2> device, ComPt
 		m_meshes.push_back(ProcessMesh(scene->mMeshes[i], scene, i, device, commandList));
 	}
 #pragma warning(pop)
-	//ProcessScene(path, device, commandList);
-	
-	// Upload texture data to the default heap resources.
-	//{
-	//	constexpr int materialCount = 5;
-
-	//	D3D12_RESOURCE_DESC textureDesc = {};
-	//	textureDesc.MipLevels = 1;
-	//	textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	//	textureDesc.Width = 128;
-	//	textureDesc.Height = 128;
-	//	textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-	//	textureDesc.DepthOrArraySize = 1;
-	//	textureDesc.SampleDesc.Count = 1;
-	//	textureDesc.SampleDesc.Quality = 0;
-	//	textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-
-	//	const UINT subresourceCount = textureDesc.DepthOrArraySize * textureDesc.MipLevels;
-	//	const UINT64 uploadBufferStep = GetRequiredIntermediateSize(m_resource.Get(), 0, subresourceCount); // All of our textures are the same size in this case.
-	//	const UINT64 uploadBufferSize = uploadBufferStep * materialCount;
-	//	ThrowIfFailed(device->CreateCommittedResource(
-	//		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
-	//		D3D12_HEAP_FLAG_NONE,
-	//		&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
-	//		D3D12_RESOURCE_STATE_GENERIC_READ,
-	//		nullptr,
-	//		IID_PPV_ARGS(&uploadHeap)));
-
-	//	int correctCount = 0;
-	//	for (int i = 0; ; ++i)
-	//	{
-	//		if (uploadBufferStep != m_textures[i].subresourceData.SlicePitch) {
-	//			continue;
-	//		}
-	//		// Copy data to the intermediate upload heap and then schedule 
-	//		// a copy from the upload heap to the appropriate texture.
-
-	//		UpdateSubresources(commandList.Get(), m_textures[i].resource.Get(), uploadHeap.Get(), correctCount * uploadBufferStep, 0, subresourceCount, &m_textures[i].subresourceData);
-	//		commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_textures[i].resource.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE));
-
-	//		//D3D12_TEXTURE_COPY_LOCATION dst{};
-	//		//dst.pResource = m_resource.Get();
-	//		//dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-	//		//dst.SubresourceIndex = correctCount;
-
-	//		//D3D12_TEXTURE_COPY_LOCATION src{};
-	//		//src.pResource = m_textures[i].resource.Get();
-
-	//		//commandList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
-	//			
-	//		correctCount++;
-	//		if (correctCount == materialCount) {
-	//			break;
-	//		}
-	//	}
-	//}
 
 	assert(PrepareBuffers(device, indexFormat) && "Failed to prepare buffers");
 }

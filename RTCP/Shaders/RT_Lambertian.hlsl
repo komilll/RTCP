@@ -180,7 +180,7 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 
 	// Use white albedo for all textures (DEBUG version)
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
-	albedo = float4(1, 1, 1, 1);
+	//albedo = float4(1, 1, 1, 1);
 	
 	// Iterate over all lights
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
@@ -195,7 +195,11 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 		// Check visibility
 		float NoL = saturate(dot(triangleNormal.xyz, toLight));
 		float visibility = shadowRayVisibility(hitPos, toLight, 1e-3f, distToLight);
-
+		if (g_giCB.samplingType == SAMPLE_UNIFORM)
+		{
+			NoL *= 2.0;
+		}
+		
 		// Calculate light contribution to point in world (diffuse lambertian term)
 		payload.color += visibility * NoL * albedo.rgb * INV_PI;
 	}
