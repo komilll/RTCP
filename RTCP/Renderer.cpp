@@ -116,7 +116,7 @@ void Renderer::OnUpdate()
 
         if (!m_resetFrameAO)
         {
-            if ((m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0))
+            if (!DO_PAUSE && (m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0))
             {
                 m_aoBuffer.value.accFrames++;
             }
@@ -170,7 +170,7 @@ void Renderer::OnUpdate()
             m_giBuffer.value.accFrames = 0;
         }
         else {
-            if ((m_giBuffer.value.accFrames < m_giBuffer.value.maxFrames || m_giBuffer.value.maxFrames == 0))
+            if (!DO_PAUSE && (m_giBuffer.value.accFrames < m_giBuffer.value.maxFrames || m_giBuffer.value.maxFrames == 0))
             {
                 m_giBuffer.value.accFrames++;
             }
@@ -622,60 +622,68 @@ void Renderer::PopulateCommandList()
         }
         m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtNormalTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
 
-        /* RTAO ALGORITHM */
-        if (RENDER_ONLY_RTAO)
+        if (!DO_PAUSE)
         {
-            if (m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0)
+            /* RTAO ALGORITHM */
+            if (RENDER_ONLY_RTAO)
             {
-                ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingAO->GetDescriptorHeap().Get() };
+                if (m_aoBuffer.value.accFrames < m_aoBuffer.value.maxFrames || m_aoBuffer.value.maxFrames == 0)
+                {
+                    ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingAO->GetDescriptorHeap().Get() };
+                    m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+                    ComPtr<ID3D12StateObject> rtpso = m_raytracingAO->GetRTPSO();
+                    D3D12_DISPATCH_RAYS_DESC desc = m_raytracingAO->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
+                    m_commandList->SetPipelineState1(rtpso.Get());
+                    m_commandList->DispatchRays(&desc);
+                }
+                // Transition DXR output to a copy source
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+                m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtAoTexture.Get());
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+            }
+
+            /* RT LAMBERT ALGORITHM */
+            if (!RENDER_ONLY_RTAO && RENDER_LAMBERT)
+            {
+                ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingLambert->GetDescriptorHeap().Get() };
                 m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 
-                ComPtr<ID3D12StateObject> rtpso = m_raytracingAO->GetRTPSO();
-                D3D12_DISPATCH_RAYS_DESC desc = m_raytracingAO->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
+                ComPtr<ID3D12StateObject> rtpso = m_raytracingLambert->GetRTPSO();
+                D3D12_DISPATCH_RAYS_DESC desc = m_raytracingLambert->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
                 m_commandList->SetPipelineState1(rtpso.Get());
                 m_commandList->DispatchRays(&desc);
+
+                // Transition DXR output to a copy source
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+                m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtLambertTexture.Get());
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
             }
-            // Transition DXR output to a copy source
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-            m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtAoTexture.Get());
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtAoTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+            /* RT GGX ALGORITHM */
+            if (!RENDER_ONLY_RTAO && RENDER_GGX)
+            {
+                ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingGGX->GetDescriptorHeap().Get() };
+                m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+                ComPtr<ID3D12StateObject> rtpso = m_raytracingGGX->GetRTPSO();
+                D3D12_DISPATCH_RAYS_DESC desc = m_raytracingGGX->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
+                m_commandList->SetPipelineState1(rtpso.Get());
+                m_commandList->DispatchRays(&desc);
+
+                // Transition DXR output to a copy source
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+                m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtGGXTexture.Get());
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+                m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+            }
         }
-
-        /* RT LAMBERT ALGORITHM */
-        if (!RENDER_ONLY_RTAO && RENDER_LAMBERT)
+        else 
         {
-            ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingLambert->GetDescriptorHeap().Get() };
-            m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-
-            ComPtr<ID3D12StateObject> rtpso = m_raytracingLambert->GetRTPSO();
-            D3D12_DISPATCH_RAYS_DESC desc = m_raytracingLambert->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
-            m_commandList->SetPipelineState1(rtpso.Get());
-            m_commandList->DispatchRays(&desc);
-
-            // Transition DXR output to a copy source
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-            m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtLambertTexture.Get());
+            // Change state only to ensure that further calculation and states are correct
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-        }
-
-        /* RT GGX ALGORITHM */
-        if (!RENDER_ONLY_RTAO && RENDER_GGX)
-        {
-            ID3D12DescriptorHeap* ppHeaps[] = { m_raytracingGGX->GetDescriptorHeap().Get() };
-            m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-
-            ComPtr<ID3D12StateObject> rtpso = m_raytracingGGX->GetRTPSO();
-            D3D12_DISPATCH_RAYS_DESC desc = m_raytracingGGX->GetDispatchRaysDesc(m_windowWidth, m_windowHeight, 1);
-            m_commandList->SetPipelineState1(rtpso.Get());
-            m_commandList->DispatchRays(&desc);
-
-            // Transition DXR output to a copy source
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-            m_commandList->CopyResource(m_backBuffers[m_frameIndex].Get(), m_rtGGXTexture.Get());
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
         }
 
         // Unrelated to any algortihms
@@ -717,7 +725,6 @@ void Renderer::PopulateCommandList()
             // Indicate that the back buffer will now be used to present.
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT)); 
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-
         }
     }
     else

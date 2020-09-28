@@ -127,6 +127,7 @@ private:
 	// DEBUG PROPERTIES
 	bool FREEZE_CAMERA = false;
 	bool DO_RAYTRACING = true;
+	bool DO_PAUSE = false;
 
 	bool USE_SKYBOX = true;
 
