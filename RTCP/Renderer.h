@@ -136,8 +136,8 @@ private:
 	bool USE_GI_INDIRECT = false;
 	
 	bool RENDER_ONLY_RTAO = false;
-	bool RENDER_LAMBERT = true;
-	bool RENDER_GGX = false;
+	bool RENDER_LAMBERT = false;
+	bool RENDER_GGX = true;
 	
 	bool SAMPLE_MJ = true;
 	bool SAMPLE_UNIFORM = false;
@@ -221,7 +221,7 @@ private:
 
 	// Textures
 	ComPtr<ID3D12Resource> m_backBuffers[m_frameCount];
-	ComPtr<ID3D12Resource> m_pebblesTexture;
+	ComPtr<ID3D12Resource> m_dfgTexture;
 	ComPtr<ID3D12Resource> m_skyboxTexture;
 
 	// Models

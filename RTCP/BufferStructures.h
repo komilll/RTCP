@@ -47,7 +47,7 @@ typedef struct _giConstantBuffer
 	int bounceCount = 1;
 	int sqrtMaxFrames = 10;
 	int maxFrames = 100;
-	int samplingType;
+	int samplingType = 1;
 	bool useSkybox;
 	float padding[55] = {};
 } GiConstantBuffer;

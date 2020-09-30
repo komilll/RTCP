@@ -18,6 +18,7 @@ struct PayloadIndirect
 	uint rndSeed; // pixelIdx
 	uint rndSeed2; // sampleSetIdx
 	int pathLength;
+	bool diffusePath;
 };
 
 struct LightConstantBuffer
@@ -42,7 +43,8 @@ StructuredBuffer<Vertex> vertices : register(t2);
 Texture2D<float4> NormalTextureInput : register(t3);
 Texture2D<float4> albedoTexture : register(t4);
 Texture2D<float4> specularTexture : register(t5);
-TextureCube<float4> skyboxTexture : register(t6);
+Texture2D<float4> dfgTexture : register(t6);
+TextureCube<float4> skyboxTexture : register(t7);
 
 SamplerState g_sampler : register(s0);
 ////
@@ -86,6 +88,61 @@ float shadowRayVisibility(float3 origin, float3 dir, float tMin, float tMax)
 	TraceRay(SceneBVH, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 0, 2, 0, visRay, payload);
 	
 	return payload.vis;
+}
+
+float3 Fresnel(in float3 specAlbedo, in float3 h, in float3 l)
+{
+	float3 fresnel = specAlbedo + (1.0f - specAlbedo) * pow((1.0f - saturate(dot(l, h))), 5.0f);
+
+    // Fade out spec entirely when lower than 0.1% albedo
+	fresnel *= saturate(dot(specAlbedo, 333.0f));
+
+	return fresnel;
+}
+
+float3 SampleGGXVisibleNormal(float3 wo, float ax, float ay, float u1, float u2)
+{
+    // Stretch the view vector so we are sampling as though
+    // roughness==1
+	float3 v = normalize(float3(wo.x * ax, wo.y * ay, wo.z));
+
+    // Build an orthonormal basis with v, t1, and t2
+	float3 t1 = (v.z < 0.999f) ? normalize(cross(v, float3(0, 0, 1))) : float3(1, 0, 0);
+	float3 t2 = cross(t1, v);
+
+    // Choose a point on a disk with each half of the disk weighted
+    // proportionally to its projection onto direction v
+	float a = 1.0f / (1.0f + v.z);
+	float r = sqrt(u1);
+	float phi = (u2 < a) ? (u2 / a) * PI : PI + (u2 - a) / (1.0f - a) * PI;
+	float p1 = r * cos(phi);
+	float p2 = r * sin(phi) * ((u2 < a) ? 1.0f : v.z);
+
+    // Calculate the normal in this stretched tangent space
+	float3 n = p1 * t1 + p2 * t2 + sqrt(max(0.0f, 1.0f - p1 * p1 - p2 * p2)) * v;
+
+    // Unstretch and normalize the normal
+	return normalize(float3(ax * n.x, ay * n.y, max(0.0f, n.z)));
+}
+
+float SmithGGXMasking(float3 n, float3 l, float3 v, float a2)
+{
+	float dotNL = saturate(dot(n, l));
+	float dotNV = saturate(dot(n, v));
+	float denomC = sqrt(a2 + (1.0f - a2) * dotNV * dotNV) + dotNV;
+
+	return 2.0f * dotNV / denomC;
+}
+
+float SmithGGXMaskingShadowing(float3 n, float3 l, float3 v, float a2)
+{
+	float dotNL = saturate(dot(n, l));
+	float dotNV = saturate(dot(n, v));
+
+	float denomA = dotNV * sqrt(a2 + (1.0f - a2) * dotNL * dotNL);
+	float denomB = dotNL * sqrt(a2 + (1.0f - a2) * dotNV * dotNV);
+
+	return 2.0f * dotNL * dotNV / (denomA + denomB);
 }
 
 #define SAMPLE_UNIFORM 0
@@ -139,11 +196,21 @@ void RayGen()
 	indirectPayload.rndSeed = seed;
 	indirectPayload.rndSeed2 = seed2;
 	indirectPayload.pathLength = 0;
+	indirectPayload.diffusePath = false;
 		
 	// Calculate pixel color in current pass and merge with previous frames
 	float4 finalColor = float4(shootIndirectRay(primaryRayOrigin, primaryRayDirection, 1e-3f, indirectPayload), 1.0f);
-	float4 prevScene = RTOutput[LaunchIndex];
-	finalColor = ((float) g_giCB.accFrames * prevScene + finalColor) / ((float) g_giCB.accFrames + 1.0f);
+	bool colorsNan = any(isnan(finalColor));
+	if (colorsNan)
+	{
+		finalColor = float4(0, 0, 0, 1);
+	}
+	
+	if (g_giCB.accFrames > 0)
+	{
+		float4 prevScene = RTOutput[LaunchIndex];
+		finalColor = ((float) g_giCB.accFrames * prevScene + finalColor) / ((float) g_giCB.accFrames + 1.0f);
+	}
 	RTOutput[LaunchIndex] = finalColor;
 }
 
@@ -171,6 +238,83 @@ void MissIndirect(inout PayloadIndirect payload : SV_RayPayload)
 	}
 }
 
+//-------------------------------------------------------------------------------------------------
+// Helper for computing the GGX visibility term
+//-------------------------------------------------------------------------------------------------
+float GGXV1(in float m2, in float nDotX)
+{
+	return 1.0f / (nDotX + sqrt(m2 + (1 - m2) * nDotX * nDotX));
+}
+
+//-------------------------------------------------------------------------------------------------
+// Computes the GGX visibility term
+//-------------------------------------------------------------------------------------------------
+float GGXVisibility(in float m2, in float nDotL, in float nDotV)
+{
+	return GGXV1(m2, nDotL) * GGXV1(m2, nDotV);
+}
+
+
+float GGXSpecular(in float m, in float3 n, in float3 h, in float3 v, in float3 l)
+{
+	float nDotH = saturate(dot(n, h));
+	float nDotL = saturate(dot(n, l));
+	float nDotV = saturate(dot(n, v));
+
+	float nDotH2 = nDotH * nDotH;
+	float m2 = m * m;
+
+    // Calculate the distribution term
+	float x = nDotH * nDotH * (m2 - 1) + 1;
+	float d = m2 / (PI * x * x);
+
+    // Calculate the matching visibility term
+	float vis = GGXVisibility(m2, nDotL, nDotV);
+
+	return d * vis;
+}
+
+float3 CalcLighting(in float3 normal, in float3 lightDir, in float3 peakIrradiance,
+                    in float3 diffuseAlbedo, in float3 specularAlbedo, in float roughness,
+                    in float3 positionWS, in float3 cameraPosWS, in float3 msEnergyCompensation)
+{
+	float3 lighting = diffuseAlbedo * INV_PI;
+
+	float3 view = normalize(cameraPosWS - positionWS);
+	const float NoL = saturate(dot(normal, lightDir));
+	if (NoL > 0.0f)
+	{
+		const float NoV = saturate(dot(normal, view));
+		float3 h = normalize(view + lightDir);
+
+		float3 fresnel = Fresnel(specularAlbedo, h, lightDir);
+
+		float specular = GGXSpecular(roughness, normal, h, view, lightDir);
+		lighting += specular * fresnel * msEnergyCompensation;
+	}
+
+	return lighting * NoL * peakIrradiance;
+}
+
+float3 getGGXMicrofacet(inout uint randSeed, float roughness, float3 hitNorm)
+{
+	// Get our uniform random numbers
+	float2 randVal = float2(nextRand(randSeed), nextRand(randSeed));
+
+	// Get an orthonormal basis from the normal
+	float3 B = getPerpendicularVector(hitNorm);
+	float3 T = cross(B, hitNorm);
+
+	// GGX NDF sampling
+	float a2 = roughness * roughness;
+	float cosThetaH = sqrt(max(0.0f, (1.0 - randVal.x) / ((a2 - 1.0) * randVal.x + 1)));
+	float sinThetaH = sqrt(max(0.0f, 1.0f - cosThetaH * cosThetaH));
+	float phiH = randVal.y * PI * 2.0f;
+
+	// Get our GGX NDF sample (i.e., the half vector)
+	return T * (sinThetaH * cos(phiH)) + B * (sinThetaH * sin(phiH)) + hitNorm * cosThetaH;
+}
+
 [shader("closesthit")]
 void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
@@ -182,6 +326,20 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 	// Use white albedo for all textures (DEBUG version)
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
 	//albedo = float4(1, 1, 1, 1);
+
+	float roughness = specularTexture.Load(int3(DispatchRaysIndex().xy, 0)).g;
+	float metallic = specularTexture.Load(int3(DispatchRaysIndex().xy, 0)).b;
+	bool enableDiffuse = metallic < 1.0f;
+	bool enableSpecular = !payload.diffusePath;
+
+	const float3 diffuseAlbedo = lerp(albedo, 0.0f, metallic) * (enableDiffuse ? 1.0f : 0.0f);
+	const float3 specularAlbedo = lerp(0.03f, albedo, metallic) * (enableSpecular ? 1.0f : 0.0f);
+
+	float3 msEnergyCompensation = float3(1, 1, 1);
+	float2 DFG = dfgTexture.SampleLevel(g_sampler, float2(saturate(dot(triangleNormal, -WorldRayDirection())), roughness), 0.0f).xy;
+	float Ess = DFG.x;
+	msEnergyCompensation = float3(1, 1, 1) + specularAlbedo * (1.0f / Ess - 1.0f);
+	float3 worldOrigin = WorldRayOrigin();
 	
 	// Iterate over all lights
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
@@ -191,25 +349,75 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 		float3 lightColor = g_lightCB.lightDiffuseColor[i].rgb;
 		float3 toLight = g_lightCB.lightPositionAndType[i].xyz - hitPos;
 		float distToLight = length(toLight);
-		toLight = normalize(toLight);
+		float3 L = toLight / distToLight;
+		float3 V = g_sceneCB.cameraPosition.xyz;
+		float3 N = triangleNormal.xyz;
 		
 		// Check visibility
-		float NoL = saturate(dot(triangleNormal.xyz, toLight));
-		float visibility = shadowRayVisibility(hitPos, toLight, 1e-3f, distToLight);
+		float NoL = saturate(dot(N, L));
+		float visibility = shadowRayVisibility(hitPos, L, 1e-3f, distToLight);
 		if (g_giCB.samplingType == SAMPLE_UNIFORM)
 		{
 			NoL *= 2.0;
 		}
 		
 		// Calculate light contribution to point in world (diffuse lambertian term)
-		payload.color += visibility * NoL * albedo.rgb * INV_PI;
+		payload.color += CalcLighting(triangleNormal, toLight, 1.0f, diffuseAlbedo, specularAlbedo,
+					roughness, hitPos, worldOrigin, msEnergyCompensation) * visibility;
+		
+		//float H = normalize(V + L);
+		//float NoH = saturate(dot(N, H));
+		//float LoH = saturate(dot(L, H));
+		//float NoV = saturate(dot(N, V));
+		//float VoH = saturate(dot(V, H));
+		//float3 ggxTerm = 0;
+		
+		//if (NoL > 0.0f)
+		//{
+		//	float3 F = Specular_F_Schlick(specularAlbedo, VoH);
+		//	float D = Specular_D_GGX(roughness, NoH);
+		//	float G1 = Specular_G_GGX(roughness, NoV);
+		//	float G2 = Specular_G_GGX(roughness, NoL);
+		//	float G = G1 * G2;
+			
+		//	ggxTerm = D * G * F / (4 * NoV);
+		//}
+
+		//payload.color += visibility * (ggxTerm + NoL * diffuseAlbedo * INV_PI) * msEnergyCompensation;
+	
+		//float H = normalize(V + L);
+		//float NoH = saturate(dot(N, H));
+		//float LoH = saturate(dot(L, H));
+		//float NoV = saturate(dot(N, V));
+		//float VoH = saturate(dot(V, H));
+		
+		//float D = Specular_D_GGX(roughness, NoH);
+		//float G1 = Specular_G_GGX(roughness, NoV);
+		//float G2 = Specular_G_GGX(roughness, NoL);
+		//float G = G1 * G2;
+		//float3 F = Specular_F_Schlick(specularAlbedo, VoH);
+		
+		//float3 ggxTerm = D * G * F / (4.0f * NoV);
+		//// ONLY SPECULAR (for now)
+		//payload.color += visibility * ggxTerm;
 	}
 	
 	if (g_giCB.useIndirect == 1)
 	{
+		float2 brdfSample = SamplePoint(payload.rndSeed, payload.rndSeed2);
+				
+		float selector = brdfSample.x;
+		if (enableSpecular == false)
+			selector = 0.0f;
+		else if (enableDiffuse == false)
+			selector = 1.0f;
+		
 		// Continue spawning rays if path left has not reached maximum
 		if (payload.pathLength < g_giCB.bounceCount)
 		{
+			float3 throughput = float3(0, 0, 0);
+			float pSpecular = 1.0f / (2.0f - metallic);
+					
 			// Find next direction
 			float3 rayDirWS = float3(0, 0, 0);
 			if (g_giCB.samplingType == SAMPLE_UNIFORM)
@@ -222,16 +430,84 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 			else if (g_giCB.samplingType == SAMPLE_MJ)
 			{
 				float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
-				float2 brdfSample = SamplePoint(payload.rndSeed, payload.rndSeed2);
 				
-				float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
-				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
+				if (selector < 0.5f)
+				{
+					if (enableSpecular)
+						brdfSample.x *= 2.0f;
+					float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
+					rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
+					throughput = diffuseAlbedo;
+				}
+				else
+				{
+					//float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
+					//rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
+					if (enableDiffuse)
+						brdfSample.x = (brdfSample.x - 0.5f) * 2.0f;
+
+					float3 incomingRayDirWS = WorldRayDirection();
+				
+					float3 incomingRayDirTS = normalize(mul(incomingRayDirWS, transpose(tangentToWorld)));
+					float3 microfacetNormalTS = SampleGGXVisibleNormal(-incomingRayDirTS, roughness, roughness, brdfSample.x, brdfSample.y);
+					float3 sampleDirTS = reflect(incomingRayDirTS, microfacetNormalTS);
+
+					float3 normalTS = float3(0.0f, 0.0f, 1.0f);
+
+					float3 F = Fresnel(specularAlbedo.rgb, microfacetNormalTS, sampleDirTS);
+					float G1 = SmithGGXMasking(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
+					float G2 = SmithGGXMaskingShadowing(normalTS, sampleDirTS, -incomingRayDirTS, roughness * roughness);
+
+					throughput = (F * (G2 / G1));
+					float3 rayDirTS = sampleDirTS;
+					rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
+				
+					DFG = dfgTexture.SampleLevel(g_sampler, float2(saturate(dot(triangleNormal, -WorldRayDirection())), roughness), 0.0f).xy;
+					Ess = DFG.x;
+					throughput *= float3(1, 1, 1) + specularAlbedo * (1.0f / Ess - 1.0f);
+				}
 			}
 			else if (g_giCB.samplingType == SAMPLE_RANDOM)
 			{
-				rayDirWS = getCosHemisphereSample(payload.rndSeed, triangleNormal, triangleTangent, triangleBitangent);
+				//rayDirWS = getCosHemisphereSample(payload.rndSeed, triangleNormal, triangleTangent, triangleBitangent);
 				nextRand(payload.rndSeed);
+				
+				float3 V = g_sceneCB.cameraPosition.xyz;
+				float3 N = triangleNormal.xyz;
+				
+				// Randomly sample the NDF to get a microfacet in our BRDF to reflect off of
+				float3 H = getGGXMicrofacet(payload.rndSeed, roughness, N);
+
+				// Compute the outgoing direction based on this (perfectly reflective) microfacet
+				float3 L = normalize(2.f * dot(V, H) * H - V);
+				rayDirWS = L;
+				
+				// Compute some dot products needed for shading
+				float NoL = saturate(dot(N, L));
+				float NoV = saturate(dot(N, V));
+				float NoH = saturate(dot(N, H));
+				float LoH = saturate(dot(L, H));
+				float VoH = saturate(dot(V, H));
+
+				// Evaluate our BRDF using a microfacet BRDF model
+				float D = Specular_D_GGX(roughness, NoH);
+				float G1 = Specular_G_GGX(roughness, NoV);
+				float G2 = Specular_G_GGX(roughness, NoL);
+				float G = G1 * G2;
+				float3 F = Specular_F_Schlick(specularAlbedo, VoH);
+				float3 ggxTerm = D * G * F / (4 * NoL * NoV); // The Cook-Torrance microfacet BRDF
+
+				// What's the probability of sampling vector H from getGGXMicrofacet()?
+				float ggxProb = D * NoH / (4 * LoH);
+
+				// Accumulate the color:  ggx-BRDF * incomingLight * NdotL / probability-of-sampling
+				//    -> Should really simplify the math above.
+				float probDiffuse = 0.0f;
+				throughput = NoL * ggxTerm / (ggxProb * (1.0f - probDiffuse));
 			}
+			
+			if (enableDiffuse && enableSpecular)
+				throughput *= 2.0f;
 			
 			// Prepare payload
 			PayloadIndirect newPayload;
@@ -239,10 +515,16 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 			newPayload.rndSeed = payload.rndSeed;
 			newPayload.rndSeed2 = payload.rndSeed2;
 			newPayload.color = float3(0, 0, 0);
+			newPayload.diffusePath = (selector < 0.5f);
 			
 			// Calculate next ray bounce color contribution
 			float3 bounceColor = shootIndirectRay(hitPos, rayDirWS, 1e-3f, newPayload);
-			payload.color += bounceColor * albedo.rgb;
+			
+			// Check to make sure our randomly selected, normal mapped diffuse ray didn't go below the surface.
+			//if (dot(triangleNormal, rayDirWS) <= 0.0f)
+			//	bounceColor = float3(0, 0, 0);
+			
+			payload.color += bounceColor * throughput; //* albedo.rgb;
 		}
 	}
 }

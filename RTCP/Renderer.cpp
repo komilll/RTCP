@@ -164,6 +164,7 @@ void Renderer::OnUpdate()
         if (SAMPLE_UNIFORM) samplingType = 0;
         if (SAMPLE_MJ) samplingType = 1;
         if (SAMPLE_RANDOM) samplingType = 2;
+        m_giBuffer.value.samplingType = samplingType;
 
         if (m_resetFrameGI) {
             m_resetFrameGI = false;
@@ -203,6 +204,12 @@ void Renderer::OnUpdate()
             m_lightSettings->SaveLightToFile();
         }
     }
+
+    // Change SRV for postprocess shader depending on RT shader type
+    D3D12_CPU_DESCRIPTOR_HANDLE handle = m_heapPostprocess->GetCPUDescriptorHandleForHeapStart();
+    UINT handleIncrement = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    handle.ptr += handleIncrement;
+    m_device->CreateShaderResourceView(RENDER_LAMBERT ? m_rtLambertTexture.Get() : m_rtGGXTexture.Get(), &GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT), handle);
 
     m_postprocessBuffer.Update();
 }
@@ -528,9 +535,11 @@ void Renderer::LoadAssets()
     ComPtr<ID3D12Resource> uploadHeap;
     // Create texture for rasterized object
     {
+        CreateTextureFromFileRTCP(m_dfgTexture, m_commandList, L"DFG.dds", uploadHeap);
         //CreateTextureFromFileRTCP(m_pebblesTexture, m_commandList, L"Pebles.png", uploadHeap, D3D12_RESOURCE_FLAG_NONE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         //CreateSRV_Texture2DArray(m_modelPinkRoom->GetTextureResourcesAlbedo(), m_srvHeap.Get(), 0, m_device.Get());
         CreateSRV_Texture2D(m_rtLambertTexture, m_srvHeap.Get(), 0, m_device.Get());
+        //CreateSRV_Texture2D(m_rtGGXTexture, m_srvHeap.Get(), 0, m_device.Get());
         CreateUploadHeapRTCP(m_device.Get(), m_postprocessBuffer);
     }
 
@@ -564,7 +573,7 @@ void Renderer::LoadAssets()
         m_device->CreateConstantBufferView(&cbvDesc, handle);
         
         handle.ptr += handleIncrement;
-        m_device->CreateShaderResourceView(m_rtLambertTexture.Get(), &GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT), handle);
+        m_device->CreateShaderResourceView(RENDER_LAMBERT ? m_rtLambertTexture.Get() : m_rtGGXTexture.Get(), &GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT), handle);
     }
 
     // Preparation of raytracing - create resources objects with RTPSO
@@ -693,6 +702,7 @@ void Renderer::PopulateCommandList()
         /* RENDER POSTPROCESS (rasterize) */
         {
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
             m_commandList->SetPipelineState(m_psoPostprocess.Get());
             m_commandList->SetGraphicsRootSignature(m_rootSignaturePostprocess.Get());
@@ -701,6 +711,7 @@ void Renderer::PopulateCommandList()
             m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
             CD3DX12_GPU_DESCRIPTOR_HANDLE cbvHandle(m_heapPostprocess->GetGPUDescriptorHandleForHeapStart(), 0, m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
             CD3DX12_GPU_DESCRIPTOR_HANDLE srvHandle(m_heapPostprocess->GetGPUDescriptorHandleForHeapStart(), 1, m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+
             m_commandList->SetGraphicsRootDescriptorTable(0, cbvHandle);
             m_commandList->SetGraphicsRootDescriptorTable(1, srvHandle);
 
@@ -725,6 +736,7 @@ void Renderer::PopulateCommandList()
             // Indicate that the back buffer will now be used to present.
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_backBuffers[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT)); 
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+            m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
         }
     }
     else
@@ -1256,21 +1268,22 @@ void Renderer::PrepareRaytracingResourcesGGX(const std::shared_ptr<ModelClass> m
     textures.push_back({ TextureWithDesc{m_rtNormalTexture, GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R16G16B16A16_FLOAT) } });
     textures.push_back({ TextureWithDesc{m_rtAlbedoTexture, GetDefaultSRVTexture2DDesc() } });
     textures.push_back({ TextureWithDesc{m_rtSpecularTexture, GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_dfgTexture, GetDefaultSRVTexture2DDesc(DXGI_FORMAT_R32G32_FLOAT) } });
     textures.push_back({ TextureWithDesc{m_skyboxTexture, GetDefaultSkyboxDesc() } });
 
     CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", 4, textures, samplers, L"RayGen");
     CreateMissShader(missShader, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", L"Miss");
     CreateClosestHitShader(hitShader, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", L"ClosestHit");
 
-    //CreateMissShader(missShaderIndirect, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"MissIndirect");
-    //CreateClosestHitShader(hitShaderIndirect, m_shaderCompiler, L"Shaders/RT_Lambertian.hlsl", L"ClosestHitIndirect");
+    CreateMissShader(missShaderIndirect, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", L"MissIndirect");
+    CreateClosestHitShader(hitShaderIndirect, m_shaderCompiler, L"Shaders/RT_GGX.hlsl", L"ClosestHitIndirect");
 
     HitGroup group = { rayGenShader, missShader, hitShader, L"GroupGGX" };
-    //HitGroup groupIndirect = { rayGenShader, missShaderIndirect, hitShaderIndirect, L"GroupLambert_new" };
+    HitGroup groupIndirect = { rayGenShader, missShaderIndirect, hitShaderIndirect, L"GroupGGX_Indirect" };
 
-    m_raytracingGGX = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group/*, groupIndirect*/ }));
+    m_raytracingGGX = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, groupIndirect }));
 
-    CreateRaytracingPipeline(m_raytracingGGX.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer);
+    CreateRaytracingPipeline(m_raytracingGGX.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer, {}, sizeof(XMFLOAT4) * 2);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, std::vector<TextureWithDesc> textures, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
