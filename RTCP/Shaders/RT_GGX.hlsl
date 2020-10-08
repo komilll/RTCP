@@ -218,6 +218,9 @@ void RayGen()
 		finalColor = float4(0, 0, 0, 1);
 	}
 	
+	const float FP16Max = 65000.0f;
+	finalColor = clamp(finalColor, 0.0f, FP16Max);
+	
 	if (g_giCB.accFrames > 0)
 	{
 		float4 prevScene = RTOutput[LaunchIndex];
@@ -428,7 +431,7 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 					float3 incomingRayDirWS = WorldRayDirection();
 					float3 incomingRayDirTS = normalize(mul(incomingRayDirWS, transpose(tangentToWorld)));
 					
-				#if 1
+				#if 0
 					//float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
 					
 					float a2 = roughness * roughness;
