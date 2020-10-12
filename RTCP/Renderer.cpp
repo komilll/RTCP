@@ -1181,9 +1181,11 @@ void Renderer::PrepareRaytracingResources(const std::shared_ptr<ModelClass> mode
     textures.push_back({ TextureWithDesc{m_skyboxTexture, GetDefaultSkyboxDesc() } });
     textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesAlbedo(), GetDefaultSRVTexture2DDesc() } });
     textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesSpecular(), GetDefaultSRVTexture2DDesc() } });
+    //textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesNormal(), GetDefaultSRVTexture2DDesc() } });
 
     // Craete specular texture ID offset
     m_sceneBuffer.value.specularIndex = static_cast<int>(m_modelPinkRoom->GetTextureResourcesAlbedo().size());
+    m_sceneBuffer.value.normalIndex = static_cast<int>(m_modelPinkRoom->GetTextureResourcesAlbedo().size() + m_modelPinkRoom->GetTextureResourcesSpecular().size());
     m_sceneBuffer.Update();
 
     CreateRayGenShader(rayGenShader, m_shaderCompiler, L"Shaders/RT_gBuffer.hlsl", 2, textures, samplers, L"RayGen");

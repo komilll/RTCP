@@ -33,6 +33,7 @@ public:
 		XMFLOAT2 uv;
 		unsigned int textureAlbedoID;
 		unsigned int textureSpecRoughnessID;
+		unsigned int textureNormalID;
 	};
 
 	struct Mesh {
@@ -56,6 +57,7 @@ public:
 	// Get textures
 	std::vector<ComPtr<ID3D12Resource>>& GetTextureResourcesAlbedo() { return m_diffuseTexturesResources; };
 	std::vector<ComPtr<ID3D12Resource>>& GetTextureResourcesSpecular() { return m_specularTexturesResources; };
+	std::vector<ComPtr<ID3D12Resource>>& GetTextureResourcesNormal() { return m_normalTexturesResources; };
 
 	// Get vertex buffer data
 	D3D12_VERTEX_BUFFER_VIEW GetVertexBufferView() const { return m_vertexBufferView; }
@@ -91,8 +93,10 @@ private:
 	std::vector<ComPtr<ID3D12Resource>> m_uploadHeaps{};
 	std::vector<ComPtr<ID3D12Resource>> m_diffuseTexturesResources{};
 	std::vector<ComPtr<ID3D12Resource>> m_specularTexturesResources{};
+	std::vector<ComPtr<ID3D12Resource>> m_normalTexturesResources{};
 	std::vector<Texture> m_diffuseTextures;
 	std::vector<Texture> m_specularTextures;
+	std::vector<Texture> m_normalTextures;
 
 	// Stored meshes
 	std::vector<Mesh> m_meshes;

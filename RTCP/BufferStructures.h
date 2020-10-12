@@ -21,8 +21,9 @@ typedef struct _sceneConstantBuffer
 	XMFLOAT4 cameraPosition;
 	int frameCount;
 	int specularIndex;
+	int normalIndex;
 
-	float padding[42] = {};
+	float padding[41] = {};
 } SceneConstantBuffer;
 static_assert((sizeof(SceneConstantBuffer) % 256) == 0, "Scene Constant Buffer size must be 256-byte aligned");
 
@@ -44,12 +45,16 @@ typedef struct _giConstantBuffer
 	int accFrames = 0;
 	float roughness = 0.75f;
 	float metallic = 0.0f;
+
 	int bounceCount = 1;
 	int sqrtMaxFrames = 10;
 	int maxFrames = 100;
 	int samplingType = 1;
+
 	bool useSkybox;
-	float padding[55] = {};
+	XMFLOAT3 sunDirection = XMFLOAT3{ 0.419f, 0.318f, 0.061f };
+
+	float padding[52] = {};
 } GiConstantBuffer;
 static_assert((sizeof(GiConstantBuffer) % 256) == 0, "GI Constant Buffer size must be 256-byte aligned");
 
@@ -79,7 +84,7 @@ static_assert((sizeof(LightConstantBuffer) % 256) == 0, "Light Constant Buffer s
 
 typedef struct _postprocessConstantBuffer
 {
-	float exposure = -14.f;
+	float exposure = -9.8f;
 	float padding[63];
 } PostprocessConstantBuffer;
 static_assert((sizeof(PostprocessConstantBuffer) % 256) == 0, "Postprocess Constant Buffer size must be 256-byte aligned");

@@ -115,12 +115,12 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
             }
         }
         ImGui::Separator();
-        if (ImGui::SliderFloat("Material roughness", &m_renderer->m_giBuffer.value.roughness, 0.0f, 1.0f, "%.2f")) {
-            m_renderer->m_resetFrameGI = true;
-        }
-        if (ImGui::SliderFloat("Material metallic", &m_renderer->m_giBuffer.value.metallic, 0.0f, 1.0f, "%.2f")) {
-            m_renderer->m_resetFrameGI = true;
-        }
+        //if (ImGui::SliderFloat("Material roughness", &m_renderer->m_giBuffer.value.roughness, 0.0f, 1.0f, "%.2f")) {
+        //    m_renderer->m_resetFrameGI = true;
+        //}
+        //if (ImGui::SliderFloat("Material metallic", &m_renderer->m_giBuffer.value.metallic, 0.0f, 1.0f, "%.2f")) {
+        //    m_renderer->m_resetFrameGI = true;
+        //}
         if (ImGui::SliderInt("Indirect bounce count", &m_renderer->m_giBuffer.value.bounceCount, 1, 8)) {
             m_renderer->m_resetFrameGI = true;
         }
@@ -135,6 +135,12 @@ void GuiManager::Render(ID3D12GraphicsCommandList* commandList)
 
         // Lights section
         ImGui::Text("Light settings:");
+        if (ImGui::SliderFloat3("Sun direction", &m_renderer->m_giBuffer.value.sunDirection.x, 0.0f, 1.0f)) {
+            m_renderer->m_resetFrameAO = true;
+            m_renderer->m_resetFrameGI = true;
+            m_renderer->m_resetFrameProfiler = true;
+        }
+
         if (ImGui::Button("Create light in camera pos"))
         {
             Light light{};

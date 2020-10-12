@@ -133,7 +133,7 @@ private:
 
 	bool USE_AO_FRAME_JITTER = false;
 	bool USE_AO_THIN_LENS = false;
-	bool USE_GI_INDIRECT = false;
+	bool USE_GI_INDIRECT = true;
 	
 	bool RENDER_ONLY_RTAO = false;
 	bool RENDER_LAMBERT = false;

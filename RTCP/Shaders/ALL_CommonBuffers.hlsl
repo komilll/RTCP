@@ -21,6 +21,7 @@ struct Vertex
 	float2 uv;
 	uint textureAlbedoID;
 	uint textureSpecRoughnessID;
+	uint textureNormalID;
 };
 
 // Constant Buffers
@@ -31,7 +32,8 @@ struct SceneConstantBuffer
 
 	int frameCount;
 	int specularIndex;
-	float padding[42];
+	int normalIndex;
+	float padding[41];
 };
 ////
 
@@ -56,12 +58,16 @@ struct GiConstantBuffer
 	int accFrames;
 	float roughness;
 	float metallic;
+	
 	int bounceCount;
 	int sqrtMaxFrames;
 	int maxFrames;
 	int samplingType;
+	
 	bool useSkybox;
-	float padding[55];
+	float3 sunDirection;
+	
+	float padding[52];
 };
 
 #endif //_COMMON_BUFFERS_HLSL_

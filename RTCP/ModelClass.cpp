@@ -116,8 +116,10 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 	localMesh.vertices.resize(mesh->mNumVertices);
 	bool hasTexAlbedo = false;
 	bool hasTexSpecRoughness = false;
+	bool hasTexNormal = false;
 	unsigned int albedoTexID = -1;
 	unsigned int specRoughnessTexID = -1;
+	unsigned int normalTexID = -1;
 
 	if (mesh->mMaterialIndex >= 0)
 	{
@@ -138,6 +140,14 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 			hasTexSpecRoughness = true;
 			specRoughnessTexID = specularMaps[0].textureID;
 		}
+
+		//m_normalTexturesResources.push_back({});
+		//std::vector<Texture> normalMaps = LoadMaterialTextures(m_normalTexturesResources[textureID], m_normalTextures, material, DetermineTextureType(scene, material), aiTextureType_NORMALS, "texture_normal", scene, device, commandList, textureID);
+		//if (normalMaps.size() > 0)
+		//{
+		//	hasTexNormal = true;
+		//	normalTexID = normalMaps[0].textureID;
+		//}
 	}
 
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
@@ -149,6 +159,7 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 		// TEXTURE ID
 		vertex.textureAlbedoID = hasTexAlbedo ? albedoTexID : -1;
 		vertex.textureSpecRoughnessID = hasTexSpecRoughness ? specRoughnessTexID : -1;
+		vertex.textureNormalID = hasTexNormal ? normalTexID : -1;
 
 		//NORMAL
 		if (mesh->mNormals) {
@@ -315,6 +326,7 @@ int ModelClass::GetTextureIndex(aiString* str)
 
 std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTextureFromModel(ComPtr<ID3D12Resource>& resource, const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index)
 {
+	std::vector<D3D12_SUBRESOURCE_DATA> textureData;
 	D3D12_SUBRESOURCE_DATA textureDataSingle;
 	std::unique_ptr<uint8_t[]> decodedData;
 	ComPtr<ID3D12Resource> texture;
@@ -324,6 +336,8 @@ std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTexture
 
 	std::wstring ws(s.begin(), s.end());
 	ThrowIfFailed(LoadWICTextureFromFileEx(device.Get(), ws.c_str(), 0, D3D12_RESOURCE_FLAG_NONE, WIC_LOADER_FORCE_RGBA32, texture.ReleaseAndGetAddressOf(), decodedData, textureDataSingle));
+	//ThrowIfFailed(LoadDDSTextureFromFileEx(device.Get(), ws.c_str(), 0, D3D12_RESOURCE_FLAG_NONE, DDS_LOADER_DEFAULT, texture.ReleaseAndGetAddressOf(), decodedData, textureData));
+	//textureDataSingle = textureData[0];
 
 	const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texture.Get(), 0, 1);
 	//auto desc = texture->GetDesc();

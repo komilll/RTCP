@@ -85,6 +85,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 	float2 uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
 	RTOutputAlbedo[DispatchRaysIndex().xy] = float4(textures[vertices[indices_[0]].textureAlbedoID].SampleLevel(g_sampler, uv, 0).xyz, 1);
 	RTOutputSpecRoughness[DispatchRaysIndex().xy] = float4(textures[vertices[indices_[0]].textureSpecRoughnessID + g_sceneCB.specularIndex].SampleLevel(g_sampler, uv, 0).xyz, 1);
+	//RTOutputNormal[DispatchRaysIndex().xy] = float4(textures[vertices[indices_[0]].textureNormalID + g_sceneCB.normalIndex].SampleLevel(g_sampler, uv, 0).xyz, 1);
 }
 
 [shader("miss")]
