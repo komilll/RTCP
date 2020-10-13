@@ -700,6 +700,7 @@ void Renderer::PopulateCommandList()
         m_profiler->EndProfile(m_commandList.Get(), fullFrameIdx, m_currentFrameIdx);
 
         /* RENDER POSTPROCESS (rasterize) */
+        if (!RENDER_ONLY_RTAO)
         {
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtLambertTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
             m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_rtGGXTexture.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));

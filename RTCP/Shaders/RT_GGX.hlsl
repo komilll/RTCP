@@ -206,7 +206,7 @@ void RayGen()
 	// Prepare payload
 	PayloadIndirect indirectPayload;
 	indirectPayload.color = float3(0, 0, 0);
-	indirectPayload.roughness = float3(0, 0, 0);
+	indirectPayload.roughness = 0;
 	indirectPayload.rndSeed = seed;
 	indirectPayload.rndSeed2 = seed2;
 	indirectPayload.pathLength = 0;
@@ -347,7 +347,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 	// Use white albedo for all textures (DEBUG version)
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
 	//albedo = float4(1, 1, 1, 1);
-
+	
 	float roughness = specularTexture.Load(int3(DispatchRaysIndex().xy, 0)).g;
 	roughness = max(roughness, payload.roughness);
 	float metallic = specularTexture.Load(int3(DispatchRaysIndex().xy, 0)).b;

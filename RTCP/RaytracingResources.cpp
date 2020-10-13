@@ -339,6 +339,9 @@ void RaytracingResources::CreateDxrPipelineAssets(ID3D12Device5* device, ModelCl
                 if (tex.isSRV)
                 {
                     handle.ptr += handleIncrement;
+                    if (singleTextureResource.Get() != nullptr && singleTextureResource.Get()->GetDesc().Format != tex.srvDesc.Format) {
+                        tex.srvDesc.Format = singleTextureResource.Get()->GetDesc().Format;
+                    }
                     device->CreateShaderResourceView(singleTextureResource.Get(), &tex.srvDesc, handle);
                 }
             }

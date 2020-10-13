@@ -142,7 +142,7 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 		}
 
 		//m_normalTexturesResources.push_back({});
-		//std::vector<Texture> normalMaps = LoadMaterialTextures(m_normalTexturesResources[textureID], m_normalTextures, material, DetermineTextureType(scene, material), aiTextureType_NORMALS, "texture_normal", scene, device, commandList, textureID);
+		//std::vector<Texture> normalMaps = LoadMaterialTextures(m_normalTexturesResources[textureID], m_normalTextures, material, DetermineTextureType(scene, material), aiTextureType_NORMALS, "texture_normal", scene, device, commandList, textureID, true);
 		//if (normalMaps.size() > 0)
 		//{
 		//	hasTexNormal = true;
@@ -272,7 +272,7 @@ std::string ModelClass::DetermineTextureType(const aiScene* scene, aiMaterial* m
 	return ".";
 }
 
-std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(ComPtr<ID3D12Resource>& resource, std::vector<Texture>& texturesRef, aiMaterial* mat, std::string texType, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index)
+std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(ComPtr<ID3D12Resource>& resource, std::vector<Texture>& texturesRef, aiMaterial* mat, std::string texType, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index, bool forceDDS /* = false */)
 {
 	std::vector<Texture> textures;
 
@@ -301,7 +301,7 @@ std::vector<ModelClass::Texture> ModelClass::LoadMaterialTextures(ComPtr<ID3D12R
 			{
 				//int textureindex = GetTextureIndex(&str);
 				std::string filename = std::string(str.C_Str());
-				auto data = GetTextureFromModel(resource, scene, filename, device, commandList, index);
+				auto data = GetTextureFromModel(resource, scene, filename, device, commandList, index, forceDDS);
 				texture.resource = data.first;
 				texture.subresourceData = data.second;
 			}
@@ -324,7 +324,7 @@ int ModelClass::GetTextureIndex(aiString* str)
 	return stoi(tistr);
 }
 
-std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTextureFromModel(ComPtr<ID3D12Resource>& resource, const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index)
+std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTextureFromModel(ComPtr<ID3D12Resource>& resource, const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index, bool forceDDS /* = false */)
 {
 	std::vector<D3D12_SUBRESOURCE_DATA> textureData;
 	D3D12_SUBRESOURCE_DATA textureDataSingle;
@@ -335,9 +335,13 @@ std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTexture
 	std::string s = std::regex_replace(filename, std::regex("\\\\"), "/");
 
 	std::wstring ws(s.begin(), s.end());
-	ThrowIfFailed(LoadWICTextureFromFileEx(device.Get(), ws.c_str(), 0, D3D12_RESOURCE_FLAG_NONE, WIC_LOADER_FORCE_RGBA32, texture.ReleaseAndGetAddressOf(), decodedData, textureDataSingle));
-	//ThrowIfFailed(LoadDDSTextureFromFileEx(device.Get(), ws.c_str(), 0, D3D12_RESOURCE_FLAG_NONE, DDS_LOADER_DEFAULT, texture.ReleaseAndGetAddressOf(), decodedData, textureData));
-	//textureDataSingle = textureData[0];
+	if (forceDDS) {
+		ThrowIfFailed(LoadDDSTextureFromFileEx(device.Get(), ws.c_str(), 0, D3D12_RESOURCE_FLAG_NONE, DDS_LOADER_DEFAULT, texture.ReleaseAndGetAddressOf(), decodedData, textureData));
+		textureDataSingle = textureData[0];
+	}
+	else {
+		ThrowIfFailed(LoadWICTextureFromFileEx(device.Get(), ws.c_str(), 0, D3D12_RESOURCE_FLAG_NONE, WIC_LOADER_DEFAULT, texture.ReleaseAndGetAddressOf(), decodedData, textureDataSingle));
+	}
 
 	const UINT64 uploadBufferSize = GetRequiredIntermediateSize(texture.Get(), 0, 1);
 	//auto desc = texture->GetDesc();
@@ -362,7 +366,15 @@ std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTexture
 
 		D3D12_RESOURCE_DESC textureDesc = {};
 		textureDesc.MipLevels = 1;
-		textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		if (texture->GetDesc().Format == DXGI_FORMAT_BC1_UNORM  || texture->GetDesc().Format == DXGI_FORMAT_BC1_TYPELESS) {
+			textureDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		}
+		else if (texture->GetDesc().Format == DXGI_FORMAT_BC3_UNORM || texture->GetDesc().Format == DXGI_FORMAT_BC3_TYPELESS || texture->GetDesc().Format == DXGI_FORMAT_BC5_UNORM) {
+			textureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+		}
+		else {
+			textureDesc.Format = texture->GetDesc().Format; /*DXGI_FORMAT_R8G8B8A8_UNORM*/;
+		}
 		textureDesc.Width = texture->GetDesc().Width;
 		textureDesc.Height = texture->GetDesc().Height;
 		textureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;

@@ -74,9 +74,9 @@ private:
 	void ProcessNode(std::vector<Mesh>& meshes, aiNode* node, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
 	Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene, unsigned int textureAlbedoID, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList);
 	std::string DetermineTextureType(const aiScene* scene, aiMaterial* mat);
-	std::vector<Texture> LoadMaterialTextures(ComPtr<ID3D12Resource>& resource, std::vector<Texture>& textures, aiMaterial* mat, std::string texType, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index);
+	std::vector<Texture> LoadMaterialTextures(ComPtr<ID3D12Resource>& resource, std::vector<Texture>& textures, aiMaterial* mat, std::string texType, aiTextureType type, std::string typeName, const aiScene* scene, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index, bool forceDDS = false);
 	int GetTextureIndex(aiString* str);
-	std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> GetTextureFromModel(ComPtr<ID3D12Resource>& resource, const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index);
+	std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> GetTextureFromModel(ComPtr<ID3D12Resource>& resource, const aiScene* scene, std::string filename, ComPtr<ID3D12Device2> device, ComPtr<ID3D12GraphicsCommandList4> commandList, int index, bool forceDDS = false);
 
 	// Internal functions - creating shapes
 	bool CreateRectangle(ComPtr<ID3D12Device2> device, float left, float right, float top, float bottom);
