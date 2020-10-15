@@ -20,6 +20,7 @@ struct PayloadIndirect
 	int pathLength;
 	bool diffusePath;
 	float roughness;
+	float3 throughput;
 };
 
 struct LightConstantBuffer
@@ -211,6 +212,7 @@ void RayGen()
 	indirectPayload.rndSeed2 = seed2;
 	indirectPayload.pathLength = 0;
 	indirectPayload.diffusePath = false;
+	indirectPayload.throughput = float3(1, 1, 1);
 		
 	// Calculate pixel color in current pass and merge with previous frames
 	float4 finalColor = float4(shootIndirectRay(primaryRayOrigin, primaryRayDirection, 1e-3f, indirectPayload), 1.0f);
@@ -247,12 +249,12 @@ void ClosestHit(inout PayloadIndirect payload, in BuiltInTriangleIntersectionAtt
 void MissIndirect(inout PayloadIndirect payload : SV_RayPayload)
 {
 	// Use skybox as contribution if ray failed to hit geometry (right now, disabled for debug purposes)
-	float3 rayDir = WorldRayDirection();
-	rayDir.z = -rayDir.z;
-	if (g_giCB.useSkybox)
-	{
-		payload.color += skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
-	}
+	//float3 rayDir = WorldRayDirection();
+	//rayDir.z = -rayDir.z;
+	//if (g_giCB.useSkybox)
+	//{
+	//	payload.color += skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+	//}
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -354,11 +356,11 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 	float3 normalTextureData = NormalTextureInput.Load(int3(DispatchRaysIndex().xy, 0));
 	float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
 	float3 normalWS = triangleNormal;
-
+	
 #if 0
 	{
         // Sample the normal map, and convert the normal to world space
-		Texture2D normalMap = NormalTextureInput;
+		//Texture2D normalMap = NormalTextureInput;
 
 		uint indexSizeInBytes = 4;
 		uint indicesPerTriangle = 3;
@@ -366,16 +368,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 		uint baseIndex = PrimitiveIndex() * triangleIndexStride;
 	
 		const uint3 indices_ = indices.Load3(baseIndex);
-
-		float3 vertexNormals[3] =
-		{
-			vertices[indices_[0]].normal,
-		vertices[indices_[1]].normal,
-		vertices[indices_[2]].normal
-		};
 	
-		float3 triangleNormal = HitAttribute(vertexNormals, attribs);
-
 		float3 barycentrics = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y, attribs.barycentrics.x, attribs.barycentrics.y);
 		float2 vertexUVs[3] =
 		{
@@ -387,7 +380,8 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 		float2 uv = barycentrics.x * vertexUVs[0] + barycentrics.y * vertexUVs[1] + barycentrics.z * vertexUVs[2];
 		
 		float3 normalTS;
-		normalTS.xy = normalMap.SampleLevel(g_sampler, uv, 0.0f).xy * 2.0f - 1.0f;
+		//normalTS.xy = normalMap.SampleLevel(g_sampler, uv, 0.0f).xy * 2.0f - 1.0f;
+		normalTS.xy = normalTextureData.xy * 2.0f - 1.0f;
 		normalTS.z = sqrt(1.0f - saturate(normalTS.x * normalTS.x + normalTS.y * normalTS.y));
 		normalWS = normalize(mul(normalTS, tangentToWorld));
 
@@ -396,7 +390,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 #endif
 	
 	bool enableDiffuse = metallic < 1.0f;
-	bool enableSpecular = !payload.diffusePath;
+	bool enableSpecular = !payload.diffusePath && payload.pathLength == 0;
 	
 	if (enableDiffuse == false && enableSpecular == false)
 		return float3(0, 0, 0);
@@ -440,7 +434,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 	}
 
 	float2 brdfSample = SamplePoint(payload.rndSeed, payload.rndSeed2);
-				
+
 	float selector = brdfSample.x;
 	if (enableSpecular == false)
 		selector = 0.0f;
@@ -449,7 +443,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 		
 	if (g_giCB.useIndirect == 1)
 	{
-		float3 throughput = float3(0, 0, 0);
+		float3 throughput = payload.throughput;
 		float pSpecular = 1.0f / (2.0f - metallic);
 					
 		// Find next direction
@@ -468,7 +462,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 					brdfSample.x *= 2.0f;
 				float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
 				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
-				throughput = diffuseAlbedo;
+				throughput *= diffuseAlbedo;
 			}
 			else
 			{
@@ -512,7 +506,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 				float G1 = SmithGGXMasking(normalTS, wi, -wo, roughness * roughness);
 				float G2 = SmithGGXMaskingShadowing(normalTS, wi, -wo, roughness * roughness);
 
-				throughput = (F * (G2 / G1));
+				throughput *= (F * (G2 / G1));
 				float3 rayDirTS = wi;
 				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
 #endif
@@ -576,8 +570,8 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 			}
 		}
 			
-		if (enableDiffuse && enableSpecular)
-			throughput *= 2.0f;
+		//if (enableDiffuse && enableSpecular)
+		//	throughput *= 2.0f;
 			
 		if (payload.pathLength < g_giCB.bounceCount)
 		{
@@ -589,6 +583,18 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 			newPayload.color = float3(0, 0, 0);
 			newPayload.diffusePath = (selector < 0.5f);
 			newPayload.roughness = roughness;
+			newPayload.throughput = throughput;
+			
+			//if (newPayload.pathLength > 3)
+			//{
+			//	const float q = max(0.05f, 1.f - max(throughput.x, max(throughput.y, throughput.z)));
+			//	uint r = initRand(newPayload.rndSeed, newPayload.rndSeed2 + ((uint) (selector * 100.0f)));
+			//	if (nextRand(r) < q)
+			//	{
+			//		return payload.color;
+			//	}
+			//	throughput = throughput / (1.0f - q);
+			//}
 			
 			// Calculate next ray bounce color contribution
 			float3 bounceColor = shootIndirectRay(hitPos, rayDirWS, 1e-3f, newPayload);
@@ -597,19 +603,19 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 			if (dot(normalWS, rayDirWS) <= 0.0f)
 				bounceColor = float3(0, 0, 0);
 			
-			payload.color += bounceColor * throughput; //* albedo.rgb;
+			payload.color += bounceColor * throughput;
 		}
 		else
 		{
-			float visibility = shadowRayVisibility(hitPos, rayDirWS, 1e-3f, 1e+38f);
+			//float visibility = shadowRayVisibility(hitPos, rayDirWS, 1e-3f, 1e+38f);
 
-			float3 rayDir = rayDirWS;
-			rayDir.z = -rayDir.z;
-			if (g_giCB.useSkybox)
-			{
-				float3 skyColor = skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
-				payload.color += visibility * skyColor * throughput;
-			}
+			//float3 rayDir = rayDirWS;
+			//rayDir.z = -rayDir.z;
+			//if (g_giCB.useSkybox)
+			//{
+			//	float3 skyColor = skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+			//	payload.color += visibility * skyColor * throughput;
+			//}
 		}
 	}
 	

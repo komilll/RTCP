@@ -141,13 +141,13 @@ ModelClass::Mesh ModelClass::ProcessMesh(aiMesh* mesh, const aiScene* scene, uns
 			specRoughnessTexID = specularMaps[0].textureID;
 		}
 
-		//m_normalTexturesResources.push_back({});
-		//std::vector<Texture> normalMaps = LoadMaterialTextures(m_normalTexturesResources[textureID], m_normalTextures, material, DetermineTextureType(scene, material), aiTextureType_NORMALS, "texture_normal", scene, device, commandList, textureID, true);
-		//if (normalMaps.size() > 0)
-		//{
-		//	hasTexNormal = true;
-		//	normalTexID = normalMaps[0].textureID;
-		//}
+		m_normalTexturesResources.push_back({});
+		std::vector<Texture> normalMaps = LoadMaterialTextures(m_normalTexturesResources[textureID], m_normalTextures, material, DetermineTextureType(scene, material), aiTextureType_NORMALS, "texture_normal", scene, device, commandList, textureID, true);
+		if (normalMaps.size() > 0)
+		{
+			hasTexNormal = true;
+			normalTexID = normalMaps[0].textureID;
+		}
 	}
 
 	for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
@@ -366,13 +366,13 @@ std::pair<ComPtr<ID3D12Resource>, D3D12_SUBRESOURCE_DATA> ModelClass::GetTexture
 
 		D3D12_RESOURCE_DESC textureDesc = {};
 		textureDesc.MipLevels = 1;
-		if (texture->GetDesc().Format == DXGI_FORMAT_BC1_UNORM  || texture->GetDesc().Format == DXGI_FORMAT_BC1_TYPELESS) {
+/*		if (texture->GetDesc().Format == DXGI_FORMAT_BC1_UNORM  || texture->GetDesc().Format == DXGI_FORMAT_BC1_TYPELESS) {
 			textureDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		}
 		else if (texture->GetDesc().Format == DXGI_FORMAT_BC3_UNORM || texture->GetDesc().Format == DXGI_FORMAT_BC3_TYPELESS || texture->GetDesc().Format == DXGI_FORMAT_BC5_UNORM) {
 			textureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 		}
-		else {
+		else */{
 			textureDesc.Format = texture->GetDesc().Format; /*DXGI_FORMAT_R8G8B8A8_UNORM*/;
 		}
 		textureDesc.Width = texture->GetDesc().Width;

@@ -1182,7 +1182,7 @@ void Renderer::PrepareRaytracingResources(const std::shared_ptr<ModelClass> mode
     textures.push_back({ TextureWithDesc{m_skyboxTexture, GetDefaultSkyboxDesc() } });
     textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesAlbedo(), GetDefaultSRVTexture2DDesc() } });
     textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesSpecular(), GetDefaultSRVTexture2DDesc() } });
-    //textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesNormal(), GetDefaultSRVTexture2DDesc() } });
+    textures.push_back({ TextureWithDesc{m_modelPinkRoom->GetTextureResourcesNormal(), GetDefaultSRVTexture2DDesc() } });
 
     // Craete specular texture ID offset
     m_sceneBuffer.value.specularIndex = static_cast<int>(m_modelPinkRoom->GetTextureResourcesAlbedo().size());
@@ -1286,7 +1286,7 @@ void Renderer::PrepareRaytracingResourcesGGX(const std::shared_ptr<ModelClass> m
 
     m_raytracingGGX = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, groupIndirect }));
 
-    CreateRaytracingPipeline(m_raytracingGGX.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer, {}, sizeof(XMFLOAT4) * 2);
+    CreateRaytracingPipeline(m_raytracingGGX.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer, {}, sizeof(XMFLOAT4) * 3);
 }
 
 void Renderer::CreateRayGenShader(RtProgram& shader, D3D12ShaderCompilerInfo& shaderCompiler, const wchar_t* path, int cbvDescriptors, std::vector<TextureWithDesc> textures, std::vector<CD3DX12_STATIC_SAMPLER_DESC> samplers, LPCWSTR name, LPCWSTR nameToExport)
