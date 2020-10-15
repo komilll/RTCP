@@ -249,12 +249,12 @@ void ClosestHit(inout PayloadIndirect payload, in BuiltInTriangleIntersectionAtt
 void MissIndirect(inout PayloadIndirect payload : SV_RayPayload)
 {
 	// Use skybox as contribution if ray failed to hit geometry (right now, disabled for debug purposes)
-	//float3 rayDir = WorldRayDirection();
-	//rayDir.z = -rayDir.z;
-	//if (g_giCB.useSkybox)
-	//{
-	//	payload.color += skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
-	//}
+	float3 rayDir = WorldRayDirection();
+	rayDir.z = -rayDir.z;
+	if (g_giCB.useSkybox)
+	{
+		payload.color += skyboxTexture.SampleLevel(g_sampler, rayDir, 0).rgb;
+	}
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -390,7 +390,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 #endif
 	
 	bool enableDiffuse = metallic < 1.0f;
-	bool enableSpecular = !payload.diffusePath && payload.pathLength == 0;
+	bool enableSpecular = !payload.diffusePath; //&& payload.pathLength == 0;
 	
 	if (enableDiffuse == false && enableSpecular == false)
 		return float3(0, 0, 0);
@@ -472,7 +472,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 				float3 incomingRayDirWS = WorldRayDirection();
 				float3 incomingRayDirTS = normalize(mul(incomingRayDirWS, transpose(tangentToWorld)));
 					
-#if 0
+#if 1
 				//float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
 					
 				float a2 = roughness * roughness;
@@ -487,14 +487,14 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 					
 				float3 F = Specular_F_Schlick(specularAlbedo.rgb, saturate(dot(wi, wm)));
 				float G = SmithGGXMaskingShadowing(wm, wi, wo, a2);
-				float weight = abs(dot(wo, wm) / (dot(normalTS, wo) * dot(normalTS, wm)));
 
 				rayDirWS = normalize(mul(wi, tangentToWorld));
+				float weight = abs(dot(wo, wm) / (dot(triangleNormal, incomingRayDirWS) * dot(normalTS, wm)));
 
-				if (dot(normalTS, wi) > 0.0f && dot(wi, wm) > 0.0f)
-					throughput = F * G * weight;
+				if (dot(triangleNormal, rayDirWS) > 0.0f && dot(wi, wm) > 0.0f)
+					throughput *= F * G * weight;
 				else
-					throughput = 0;
+					throughput *= 0;
 #else
 				float3 wo = incomingRayDirTS;
 				float3 wm = SampleGGXVisibleNormal(-wo, roughness, roughness, brdfSample.x, brdfSample.y);
@@ -530,7 +530,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 			{
 				float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
 				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
-				throughput = diffuseAlbedo / probDiffuse;
+				throughput *= diffuseAlbedo / probDiffuse;
 				selector = 0.0f;
 			}
 			else
@@ -566,7 +566,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 
 			// Accumulate the color:  ggx-BRDF * incomingLight * NdotL / probability-of-sampling
 			//    -> Should really simplify the math above.
-				throughput = NoL * ggxTerm / (ggxProb * (1.0f - probDiffuse));
+				throughput *= NoL * ggxTerm / (ggxProb * (1.0f - probDiffuse));
 			}
 		}
 			
