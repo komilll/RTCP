@@ -1,5 +1,12 @@
-<h1>RTCP - RayTracing/Culling Project</h1>
-Main focus of this repo is to learn DirectX12 while creating path tracer using DXR and implementing GPU culling algorithms using task/mesh shaders
+<h1>RTCP - RayTracing Project</h1>
+
+Project is being created as part of B.Sc. thesis. Original is not created in English, therefore below README file serves as summary for broader audience.
+
+<h2>RTAO</h2>
+<h3>History</h3>
+Ambient occlusion is Global Illumination approximation. It is a technique used for shadowing areas which aren't directly in a shadow of other object. Most likely, it occurs in small spaces like creases or holes which are self-occluded. This technique increases realism of generated image. Real world object even small objects has AO. Even if it is not visible in everyday life, without this effect, image is looking uncanny.
+
+
 
 <center><h4>Diffuse pathtracing - 5000 frames, path length - 8</h4></center>
 <center><img src="Images/5000spp_8bounce.jpg"></center>
