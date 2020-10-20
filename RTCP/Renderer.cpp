@@ -1250,7 +1250,7 @@ void Renderer::PrepareRaytracingResourcesLambert(const std::shared_ptr<ModelClas
 
     m_raytracingLambert = std::shared_ptr<RaytracingResources>(new RaytracingResources(m_device.Get(), m_commandList, model, { group, groupIndirect}));
 
-    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer, {}, sizeof(XMFLOAT4) * 2);
+    CreateRaytracingPipeline(m_raytracingLambert.get(), m_device.Get(), model.get(), textures, GetIndexBufferSRVDesc(model.get()), GetVertexBufferSRVDesc(model.get(), sizeof(ModelClass::VertexBufferStruct)), m_sceneBuffer, m_cameraBuffer, m_giBuffer, m_lightBuffer, {}, sizeof(XMFLOAT4) * 3);
 }
 
 void Renderer::PrepareRaytracingResourcesGGX(const std::shared_ptr<ModelClass> model)

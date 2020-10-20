@@ -472,7 +472,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 				float3 incomingRayDirWS = WorldRayDirection();
 				float3 incomingRayDirTS = normalize(mul(incomingRayDirWS, transpose(tangentToWorld)));
 					
-#if 1
+#if 0
 				//float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
 					
 				float a2 = roughness * roughness;

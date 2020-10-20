@@ -17,6 +17,7 @@ struct PayloadIndirect
 	uint rndSeed; // pixelIdx
 	uint rndSeed2; // sampleSetIdx
 	int pathLength;
+	float3 throughput;
 };
 
 struct LightConstantBuffer
@@ -138,11 +139,24 @@ void RayGen()
 	indirectPayload.rndSeed = seed;
 	indirectPayload.rndSeed2 = seed2;
 	indirectPayload.pathLength = 0;
+	indirectPayload.throughput = float3(1, 1, 1);
 		
 	// Calculate pixel color in current pass and merge with previous frames
 	float4 finalColor = float4(shootIndirectRay(primaryRayOrigin, primaryRayDirection, 1e-3f, indirectPayload), 1.0f);
-	float4 prevScene = RTOutput[LaunchIndex];
-	finalColor = ((float) g_giCB.accFrames * prevScene + finalColor) / ((float) g_giCB.accFrames + 1.0f);
+	bool colorsNan = any(isnan(finalColor));
+	if (colorsNan)
+	{
+		finalColor = float4(0, 0, 0, 1);
+	}
+	
+	const float FP16Max = 65000.0f;
+	finalColor = clamp(finalColor, 0.0f, FP16Max);
+	
+	if (g_giCB.accFrames > 0)
+	{
+		float4 prevScene = RTOutput[LaunchIndex];
+		finalColor = ((float) g_giCB.accFrames * prevScene + finalColor) / ((float) g_giCB.accFrames + 1.0f);
+	}
 	RTOutput[LaunchIndex] = finalColor;
 }
 
@@ -178,23 +192,27 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 	float3 triangleNormal, triangleTangent, triangleBitangent;
 	loadHitData(triangleNormal, triangleTangent, triangleBitangent, attribs);
 
-	// Use white albedo for all textures (DEBUG version)
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
-	//albedo = float4(1, 1, 1, 1);
 	
 	// Iterate over all lights
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
-	for (int i = 0; i < lightsCount; i++)
+	//for (int i = 0; i < lightsCount; i++)
 	{
 		// Calculate each light data
-		float3 lightColor = g_lightCB.lightDiffuseColor[i].rgb;
-		float3 toLight = g_lightCB.lightPositionAndType[i].xyz - hitPos;
-		float distToLight = length(toLight);
-		toLight = normalize(toLight);
+		//float3 lightColor = g_lightCB.lightDiffuseColor[i].rgb;
+		//float3 toLight = g_lightCB.lightPositionAndType[i].xyz - hitPos;
+		//float distToLight = length(toLight);
+		//float3 L = toLight / distToLight;
+		float3 V = g_sceneCB.cameraPosition.xyz;
+		float3 N = triangleNormal.xyz;
+		
+		float3 L = normalize(g_giCB.sunDirection);
+		float3 toLight = L;
+		float distToLight = 1e+38f;
 		
 		// Check visibility
-		float NoL = saturate(dot(triangleNormal.xyz, toLight));
-		float visibility = shadowRayVisibility(hitPos, toLight, 1e-3f, distToLight);
+		float NoL = saturate(dot(N, L));
+		float visibility = shadowRayVisibility(hitPos, L, 1e-3f, distToLight);
 		if (g_giCB.samplingType == SAMPLE_UNIFORM)
 		{
 			NoL *= 2.0;
@@ -204,6 +222,8 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 		payload.color += visibility * NoL * albedo.rgb * INV_PI;
 	}
 	
+	float3 throughput = payload.throughput;
+	throughput *= albedo.rgb;
 	if (g_giCB.useIndirect == 1)
 	{
 		// Continue spawning rays if path left has not reached maximum
@@ -237,10 +257,11 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 			newPayload.rndSeed = payload.rndSeed;
 			newPayload.rndSeed2 = payload.rndSeed2;
 			newPayload.color = float3(0, 0, 0);
+			newPayload.throughput = throughput;
 			
 			// Calculate next ray bounce color contribution
 			float3 bounceColor = shootIndirectRay(hitPos, rayDirWS, 1e-3f, newPayload);
-			payload.color += bounceColor * albedo.rgb;
+			payload.color += bounceColor * throughput;
 		}
 	}
 }

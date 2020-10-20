@@ -41,12 +41,16 @@ float linearToSRGB(float r)
 
 float4 main(PixelInputType input) : SV_TARGET
 {
-	//return float4((float) input.textureID / 36.0f, 0, 0, 1);
+	// Get backbuffer color
 	float3 color = g_texture.Sample(g_sampler, input.uv).rgb;
+	
+	// Define scale
 	const float FP16Scale = 0.0009765625f;
-		
+	
+	// Apply exposure scale settings
 	color *= exp2(g_postprocessCB.exposure) / FP16Scale;
 	
+	// Apply filmic curve and move from linear to sRGB space
 	color = ACESFilm(color);
 	color.r = linearToSRGB(color.r);
 	color.g = linearToSRGB(color.g);
