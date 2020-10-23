@@ -112,12 +112,13 @@ void RayGen()
 	}
 	
 	// Calculate primary ray direction
-	uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 16);
+	uint seed = 0;
 	uint seed2 = 0;
 	float2 offset = float2(0, 0);
 	if (g_giCB.samplingType == SAMPLE_UNIFORM)
 	{
-		seed2 = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 17);
+		seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_giCB.maxFrames, 16);
+		seed2 = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_giCB.maxFrames, 17);
 		offset = HammersleyDistribution(g_giCB.accFrames, g_giCB.maxFrames, uint2(seed, seed2));
 	}
 	else if (g_giCB.samplingType == SAMPLE_MJ)
@@ -127,6 +128,14 @@ void RayGen()
 		offset = SamplePoint(pixelIdx, sampleSetIdx);
 		seed = pixelIdx;
 		seed2 = sampleSetIdx;
+	}
+	else if (g_giCB.samplingType == SAMPLE_RANDOM)
+	{
+		seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 16);
+		seed2 = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 17);
+			
+		offset.x = nextRand(seed);
+		offset.y = nextRand(seed2);
 	}
 	
 	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
@@ -193,6 +202,7 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 	loadHitData(triangleNormal, triangleTangent, triangleBitangent, attribs);
 
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
+	float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
 	
 	// Iterate over all lights
 	float lightsCount = g_lightCB.lightPositionAndType[15].w;
@@ -213,43 +223,53 @@ void ClosestHitIndirect(inout PayloadIndirect payload, in BuiltInTriangleInterse
 		// Check visibility
 		float NoL = saturate(dot(N, L));
 		float visibility = shadowRayVisibility(hitPos, L, 1e-3f, distToLight);
-		if (g_giCB.samplingType == SAMPLE_UNIFORM)
-		{
-			NoL *= 2.0;
-		}
+		//if (g_giCB.samplingType == SAMPLE_UNIFORM)
+		//{
+		//	NoL *= 2.0;
+		//}
 		
 		// Calculate light contribution to point in world (diffuse lambertian term)
 		payload.color += visibility * NoL * albedo.rgb * INV_PI;
 	}
 	
+	float2 brdfSample = float2(0, 0);
+	float selector = 0;
+	float3 rayDirWS = float3(0, 0, 0);
+	uint2 LaunchIndex = DispatchRaysIndex().xy;
+	uint2 LaunchDimensions = DispatchRaysDimensions().xy;
+	
 	float3 throughput = payload.throughput;
 	throughput *= albedo.rgb;
 	if (g_giCB.useIndirect == 1)
 	{
+		if (g_giCB.samplingType == SAMPLE_UNIFORM)
+		{
+			if (payload.pathLength == 0)
+			{
+				brdfSample = HammersleyDistribution(g_giCB.accFrames, g_giCB.maxFrames, uint2(payload.rndSeed, payload.rndSeed2));
+			}
+			else
+			{
+				uint seed = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 16);
+				uint seed2 = initRand(LaunchIndex.x + LaunchIndex.y * LaunchDimensions.x, g_sceneCB.frameCount, 17);
+				brdfSample = HammersleyDistribution(payload.pathLength, g_giCB.bounceCount, uint2(seed, seed2));
+			}
+		}
+		else if (g_giCB.samplingType == SAMPLE_MJ)
+		{
+			brdfSample = SamplePoint(payload.rndSeed, payload.rndSeed2);
+		}
+		else if (g_giCB.samplingType == SAMPLE_RANDOM)
+		{
+			brdfSample.x = nextRand(payload.rndSeed);
+			brdfSample.y = nextRand(payload.rndSeed2);
+		}
+		
 		// Continue spawning rays if path left has not reached maximum
 		if (payload.pathLength < g_giCB.bounceCount)
 		{
-			// Find next direction
-			float3 rayDirWS = float3(0, 0, 0);
-			if (g_giCB.samplingType == SAMPLE_UNIFORM)
-			{
-				float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
-				float2 hammersley = HammersleyDistribution(payload.pathLength, g_giCB.bounceCount, uint2(payload.rndSeed, payload.rndSeed2));
-				float3 rayDirTS = UniformSampleHemisphere(hammersley.x, hammersley.y);
-				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
-			}
-			else if (g_giCB.samplingType == SAMPLE_MJ)
-			{
-				float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
-				float2 brdfSample = SamplePoint(payload.rndSeed, payload.rndSeed2);
-				float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
-				rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
-			}
-			else if (g_giCB.samplingType == SAMPLE_RANDOM)
-			{
-				rayDirWS = getCosHemisphereSample(payload.rndSeed, triangleNormal, triangleTangent, triangleBitangent);
-				nextRand(payload.rndSeed);
-			}
+			float3 rayDirTS = SampleDirectionCosineHemisphere(brdfSample.x, brdfSample.y);
+			rayDirWS = normalize(mul(rayDirTS, tangentToWorld));
 			
 			// Prepare payload
 			PayloadIndirect newPayload;

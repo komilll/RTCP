@@ -13,13 +13,25 @@
 #include "External/imgui/imgui_impl_win32.h"
 #include "External/imgui/imgui_impl_dx12.h"
 
+// Class dedicated to rendering UI which controls rendering settings
 class GuiManager
 {
 public:
+	// Constructor
 	GuiManager(ID3D12Device* device, Renderer* renderer);
 
+	// Render UI - called on command list after everything else was rendered
 	void Render(ID3D12GraphicsCommandList* commandList);
+
+	// Start/stop rendering UI
 	void ToogleRendering();
+
+private:
+	// Inline imgui render calls
+	void RenderLightSettings();
+	void SamplingTypeSettings();
+	void ShadingModelSettings();
+	void AoSettings();
 
 private:
 	ComPtr<ID3D12DescriptorHeap> m_imGuiHeap;

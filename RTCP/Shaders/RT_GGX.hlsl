@@ -127,18 +127,6 @@ float3 SampleGGXVisibleNormal(float3 wo, float ax, float ay, float u1, float u2)
 	return normalize(float3(ax * n.x, ay * n.y, max(0.0f, n.z)));
 }
 
-float luminance(float3 color)
-{
-	return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
-}
-
-float probabilityToSampleDiffuse(float3 difColor, float3 specColor)
-{
-	float lumDiffuse = max(0.01f, luminance(difColor.rgb));
-	float lumSpecular = max(0.01f, luminance(specColor.rgb));
-	return lumDiffuse / (lumDiffuse + lumSpecular);
-}
-
 float SmithGGXMasking(float3 n, float3 l, float3 v, float a2)
 {
 	float dotNL = saturate(dot(n, l));
@@ -182,7 +170,7 @@ void RayGen()
 		return;
 	}
 	
-	// Calculate primary ray direction
+	// Calculate seeds and offset
 	uint seed = 0;
 	uint seed2 = 0;
 	float2 offset = float2(0, 0);
@@ -209,6 +197,7 @@ void RayGen()
 		offset.y = nextRand(seed2);
 	}
 	
+	// Calculate primary ray origin and direction
 	float3 primaryRayOrigin = g_sceneCB.cameraPosition.xyz;
 	float3 primaryRayDirection;
 	GenerateCameraRay(LaunchIndex, LaunchDimensions, g_sceneCB.projectionToWorld, primaryRayOrigin, primaryRayDirection, offset);
@@ -231,9 +220,11 @@ void RayGen()
 		finalColor = float4(0, 0, 0, 1);
 	}
 	
+	// Clamp maximum brightness
 	const float FP16Max = 65000.0f;
 	finalColor = clamp(finalColor, 0.0f, FP16Max);
 	
+	// If not first frame - lerp values of current and previous frames
 	if (g_giCB.accFrames > 0)
 	{
 		float4 prevScene = RTOutput[LaunchIndex];
@@ -282,7 +273,6 @@ float GGXVisibility(in float m2, in float nDotL, in float nDotV)
 	return GGXV1(m2, nDotL) * GGXV1(m2, nDotV);
 }
 
-
 float GGXSpecular(in float m, in float3 n, in float3 h, in float3 v, in float3 l)
 {
 	float NoH = saturate(dot(n, h));
@@ -329,25 +319,6 @@ float3 CalcLighting(in float3 normal, in float3 lightDir, in float3 peakIrradian
 	return lighting * NoL * peakIrradiance;
 }
 
-float3 getGGXMicrofacet(inout uint randSeed, float roughness, float3 hitNorm)
-{
-	// Get our uniform random numbers
-	float2 randVal = float2(nextRand(randSeed), nextRand(randSeed));
-
-	// Get an orthonormal basis from the normal
-	float3 B = getPerpendicularVector(hitNorm);
-	float3 T = cross(B, hitNorm);
-
-	// GGX NDF sampling
-	float a2 = roughness * roughness;
-	float cosThetaH = sqrt(max(0.0f, (1.0 - randVal.x) / ((a2 - 1.0) * randVal.x + 1)));
-	float sinThetaH = sqrt(max(0.0f, 1.0f - cosThetaH * cosThetaH));
-	float phiH = randVal.y * PI * 2.0f;
-
-	// Get our GGX NDF sample (i.e., the half vector)
-	return T * (sinThetaH * cos(phiH)) + B * (sinThetaH * sin(phiH)) + hitNorm * cosThetaH;
-}
-
 float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
 	// Load hit data
@@ -355,10 +326,8 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 	float3 triangleNormal, triangleTangent, triangleBitangent;
 	loadHitData(triangleNormal, triangleTangent, triangleBitangent, attribs);
 
-	// Use white albedo for all textures (DEBUG version)
+	// Load material data
 	float4 albedo = albedoTexture.Load(int3(DispatchRaysIndex().xy, 0));
-	//albedo = float4(1, 1, 1, 1);
-	
 	float roughness = specularTexture.Load(int3(DispatchRaysIndex().xy, 0)).g;
 	roughness = max(roughness, payload.roughness);
 	float metallic = specularTexture.Load(int3(DispatchRaysIndex().xy, 0)).b;
@@ -366,6 +335,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 	float3x3 tangentToWorld = float3x3(triangleTangent, triangleBitangent, triangleNormal);
 	float3 normalWS = triangleNormal;
 	
+	// Use normal map
 #if 0
 	{
         // Sample the normal map, and convert the normal to world space
@@ -399,7 +369,7 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 #endif
 	
 	bool enableDiffuse = metallic < 1.0f;
-	bool enableSpecular = !payload.diffusePath; //&& payload.pathLength == 0;
+	bool enableSpecular = !payload.diffusePath; /*&& payload.pathLength == 0;*/
 	
 	if (enableDiffuse == false && enableSpecular == false)
 		return float3(0, 0, 0);
@@ -432,10 +402,10 @@ float3 CalculateRadiance(inout PayloadIndirect payload, in BuiltInTriangleInters
 		// Check visibility
 		float NoL = saturate(dot(N, L));
 		float visibility = shadowRayVisibility(hitPos, L, 1e-3f, distToLight);
-		if (g_giCB.samplingType == SAMPLE_UNIFORM)
-		{
-			NoL *= 2.0;
-		}
+		//if (g_giCB.samplingType == SAMPLE_UNIFORM)
+		//{
+		//	NoL *= 2.0;
+		//}
 		
 		// Calculate light contribution to point in world (diffuse lambertian term)
 		payload.color += CalcLighting(triangleNormal, toLight, 1.0f, diffuseAlbedo, specularAlbedo,
