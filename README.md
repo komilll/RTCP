@@ -44,6 +44,9 @@ Due to multiple bounces of light, energy might be added or removed and it'll be 
 <center><img src="Images/energy_compensation.png"></center>
 <center><img src="Images/energy_compensation_zoom.png"></center>
 
+<center><h4>Top: random sampling, middle: uniform sampling, bottom: correlated multi-jittered sampling</h4></center>
+<center><img src="Images/sampling_comp.png"></center>
+
 <h4>Important links:</h4>
 <ul>
   <li>Correlated Multi-Jittered Sampling - https://graphics.pixar.com/library/MultiJitteredSampling/paper.pdf
