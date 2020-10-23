@@ -32,8 +32,10 @@ Due to multiple bounces of light, energy might be added or removed and it'll be 
 <center><h4>Diffuse + specular pathtracing - 5000 frames, path length - 8</h4></center>
 <center><img src="Images/5000spp_8bounce_specular.jpg"></center>
   
-<center><h4>RTAO comparison</h4></center>
-<center><img src="Images/RTAO.png"></center>
+<center><h4>Comparison with different frame count and path length</h4></center>
+<center><img src="Images/compare_spp_b_full.png"></center>
+
+<center><img src="Images/compare_spp_b_2_full.png"></center>
 
 <center><h4>Exposure settings: -12.0, -10.0 (standard), -8.0</h4></center>
 <center><img src="Images/Exposure.png"></center>
