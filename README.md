@@ -2,6 +2,8 @@
 
 Project is being created as part of B.Sc. thesis. Original is not created in English, therefore below README file serves as summary for broader audience.
 
+If you're interested in more detailed explanation, check English abstract of my thesis here - https://github.com/komilll/RTCP/blob/master/Images/Bachelor's%20thesis%20-%20abstract.pdf - it is low quality PDF so feel free to look at the gallery below for high quality images.
+
 <h2>1. RTAO</h2>
 RTAO is superior to SSAO because it doesn't rely only on screenspace information. It works with actual geometry which allows to correctly aproximate darkenings in creases and holes in objects. RTAO is finding occlusion by casting rays to actual geometry and it works fine even for small objects. However for SSAO, some radius has to be chosen. Too small radius might cause large objects to fail to render correctly. Too big will ignore small ones.
 
